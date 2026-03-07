@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── NEXUS Design System ── */
+:root {
+  --nx-bg:      #05050c;
+  --nx-surface: #0e0e20;
+  --nx-s2:      #131326;
+  --nx-violet:  #7c3aed;
+  --nx-vb:      #8b5cf6;
+  --nx-lav:     #a78bfa;
+  --nx-soft:    #c4b5fd;
+  --nx-white:   #f0f0ff;
+  --nx-muted:   rgba(196,181,253,0.45);
+  --nx-border:  rgba(139,92,246,0.18);
+  --nx-borderb: rgba(139,92,246,0.40);
+}
+
+/* Base */
+body {
+  background: var(--nx-bg);
+  color: var(--nx-white);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Subtle grid texture */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(139,92,246,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(139,92,246,0.025) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar        { width: 4px; height: 4px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: rgba(139,92,246,0.25); border-radius: 2px; }
+
+/* ── Reusable component classes ── */
+@layer components {
+  /* Glassmorphism card */
+  .nx-card {
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.875rem;
+    border: 1px solid var(--nx-border);
+    background: rgba(13,13,30,0.72);
+    backdrop-filter: blur(18px);
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  .nx-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(139,92,246,0.35), transparent);
+    pointer-events: none;
+  }
+  .nx-card:hover {
+    border-color: rgba(139,92,246,0.28);
+    box-shadow: 0 0 28px rgba(124,58,237,0.07), 0 8px 24px rgba(0,0,0,0.25);
+  }
+
+  /* Glass input / textarea / select */
+  .nx-input {
+    width: 100%;
+    background: rgba(139,92,246,0.04);
+    border: 1px solid var(--nx-border);
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    color: var(--nx-white);
+    font-size: 0.875rem;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .nx-input::placeholder { color: rgba(196,181,253,0.3); }
+  .nx-input:focus {
+    border-color: var(--nx-borderb);
+    box-shadow: 0 0 0 3px rgba(139,92,246,0.08);
+  }
+  .nx-input:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  /* Style the native dropdown popup to match dark theme */
+  .nx-input option {
+    background: #0e0e20;
+    color: #f0f0ff;
+  }
+
+  /* Section label */
+  .nx-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--nx-muted);
+    display: block;
+    margin-bottom: 0.25rem;
+  }
+}

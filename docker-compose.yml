@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: oagent
+      POSTGRES_USER: oagent
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oagent"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgres://oagent:secret@postgres:5432/oagent?sslmode=disable
+      SESSION_SECRET: changeme32byteslongsecretkey1234
+      SEED_USERNAME: admin
+      SEED_PASSWORD: changeme
+      PORT: 8080
+      LOG_LEVEL: info
+      FRONTEND_ORIGIN: http://localhost:5174
+      # CLI agent API keys (passed through to subprocesses)
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GIT_TOKEN: ${GIT_TOKEN:-}
+    volumes:
+      # Workspace root — each worker's subdir is mounted here.
+      # migration 004 sets worker.workspace = /workspaces/<name>
+      #- /Users/chatchawan/Desktop/orch-agents-project:/workspaces
+      - ${WORKSPACES_PATH:-}:/workspaces
+      # Share host SSH keys and git config so git clone works without re-setup on rebuild.
+      - ~/.ssh:/root/.ssh:ro
+      - ~/.gitconfig:/root/.gitconfig:ro
+      # Share host codex auth so CLI agents inside the container use the same login session.
+      - ~/.codex:/root/.codex
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    develop:
+      watch:
+        - action: rebuild
+          path: ./backend
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_BACKEND_URL: http://localhost:8080
+    ports:
+      - "5174:5173"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
