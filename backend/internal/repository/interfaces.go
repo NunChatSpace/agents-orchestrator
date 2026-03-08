@@ -43,6 +43,8 @@ type WorkerRepository interface {
 	ListAll(ctx context.Context) ([]*models.Worker, error)
 	// GetOrCreateGroup finds an existing group by name or creates it.
 	GetOrCreateGroup(ctx context.Context, groupName string) (uuid.UUID, error)
+	// ListGroups returns all worker groups ordered by name.
+	ListGroups(ctx context.Context) ([]*models.WorkerGroup, error)
 	// CreateWorker inserts a new worker record.
 	CreateWorker(ctx context.Context, worker *models.Worker) error
 	// UpdateCLICommand changes the cli_command for a worker.

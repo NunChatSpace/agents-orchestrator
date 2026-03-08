@@ -79,6 +79,13 @@ func (r *workerRepo) ListAll(ctx context.Context) ([]*models.Worker, error) {
 	return workers, err
 }
 
+func (r *workerRepo) ListGroups(ctx context.Context) ([]*models.WorkerGroup, error) {
+	var groups []*models.WorkerGroup
+	err := r.db.SelectContext(ctx, &groups,
+		`SELECT group_id, name, created_at FROM worker_groups ORDER BY name`)
+	return groups, err
+}
+
 func (r *workerRepo) GetOrCreateGroup(ctx context.Context, groupName string) (uuid.UUID, error) {
 	var groupID uuid.UUID
 	err := r.db.GetContext(ctx, &groupID,

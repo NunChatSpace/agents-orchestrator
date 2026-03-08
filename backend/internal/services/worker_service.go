@@ -27,6 +27,10 @@ type WorkerService interface {
 	DeleteWorker(ctx context.Context, workerID uuid.UUID) error
 	// ws.WorkerFetcher implementation for hub broadcast payloads.
 	GetWorkerJSON(ctx context.Context, workerID uuid.UUID) (any, error)
+	// ListGroups returns all worker groups.
+	ListGroups(ctx context.Context) ([]*domains.GroupResponse, error)
+	// CreateGroup creates or returns an existing group by name.
+	CreateGroup(ctx context.Context, name string) (*domains.GroupResponse, error)
 }
 
 type workerService struct {
@@ -226,6 +230,29 @@ func (s *workerService) PingWorker(ctx context.Context, workerID uuid.UUID) (*do
 		return &domains.PingWorkerResponse{OK: false, Output: output, Error: err.Error()}, nil
 	}
 	return &domains.PingWorkerResponse{OK: true, Output: output}, nil
+}
+
+func (s *workerService) ListGroups(ctx context.Context) ([]*domains.GroupResponse, error) {
+	groups, err := s.workerRepo.ListGroups(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp := make([]*domains.GroupResponse, len(groups))
+	for i, g := range groups {
+		resp[i] = &domains.GroupResponse{GroupID: g.GroupID.String(), Name: g.Name}
+	}
+	return resp, nil
+}
+
+func (s *workerService) CreateGroup(ctx context.Context, name string) (*domains.GroupResponse, error) {
+	if name == "" {
+		return nil, errors.New("name is required")
+	}
+	groupID, err := s.workerRepo.GetOrCreateGroup(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return &domains.GroupResponse{GroupID: groupID.String(), Name: name}, nil
 }
 
 func toWorkerResponse(w *models.Worker) *domains.WorkerResponse {

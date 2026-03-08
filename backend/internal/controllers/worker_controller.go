@@ -136,6 +136,35 @@ func (c *WorkerController) Update(w http.ResponseWriter, r *http.Request) {
 	views.JSON(w, http.StatusOK, worker, rid)
 }
 
+// ListGroups handles GET /groups — returns all worker groups.
+func (c *WorkerController) ListGroups(w http.ResponseWriter, r *http.Request) {
+	rid := reqID(r)
+	groups, err := c.workerSvc.ListGroups(r.Context())
+	if err != nil {
+		views.Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error(), rid)
+		return
+	}
+	views.JSON(w, http.StatusOK, groups, rid)
+}
+
+// CreateGroup handles POST /groups — creates a group by name (idempotent).
+func (c *WorkerController) CreateGroup(w http.ResponseWriter, r *http.Request) {
+	rid := reqID(r)
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		views.Error(w, http.StatusBadRequest, "BAD_REQUEST", "invalid JSON", rid)
+		return
+	}
+	group, err := c.workerSvc.CreateGroup(r.Context(), req.Name)
+	if err != nil {
+		views.Error(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error(), rid)
+		return
+	}
+	views.JSON(w, http.StatusCreated, group, rid)
+}
+
 // Plan handles POST /workers/{worker_id}/plan — runs the CLI in plan mode and returns a refined prompt.
 func (c *WorkerController) Plan(w http.ResponseWriter, r *http.Request) {
 	rid := reqID(r)

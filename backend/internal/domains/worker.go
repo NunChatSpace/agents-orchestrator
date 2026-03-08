@@ -49,6 +49,12 @@ type PingWorkerResponse struct {
 	Error  string `json:"error,omitempty"`
 }
 
+// GroupResponse is the API representation of a worker group.
+type GroupResponse struct {
+	GroupID string `json:"group_id"`
+	Name    string `json:"name"`
+}
+
 // DispatchRequest is what OAgent sends to a WAgent's callback_url.
 type DispatchRequest struct {
 	JobID             string  `json:"job_id"`

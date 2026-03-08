@@ -70,6 +70,10 @@ func buildRouter(
 	priv.HandleFunc("/jobs/{job_id}/messages", msgCtrl.List).Methods(http.MethodGet)
 	priv.HandleFunc("/jobs/{job_id}/messages", msgCtrl.Send).Methods(http.MethodPost)
 
+	// Groups
+	priv.HandleFunc("/groups", workerCtrl.ListGroups).Methods(http.MethodGet)
+	priv.HandleFunc("/groups", workerCtrl.CreateGroup).Methods(http.MethodPost)
+
 	// Workers
 	priv.HandleFunc("/workers", workerCtrl.List).Methods(http.MethodGet)
 	priv.HandleFunc("/workers", workerCtrl.Create).Methods(http.MethodPost)

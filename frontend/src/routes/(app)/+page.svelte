@@ -39,6 +39,15 @@
 
 <div class="home-wrap">
 <div class="page-inner">
+	<div class="page-header">
+		<h1 class="page-title">Agents</h1>
+		<button class="btn-new" on:click={() => goto('/agents/new')}>
+			<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+				<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+			</svg>
+			New Agent
+		</button>
+	</div>
 	{#if $allWorkers.length === 0}
 		<div class="empty-state">
 			<div class="empty-icon">
@@ -131,6 +140,40 @@
 	.page-inner {
 		max-width: 1200px;
 		margin: 0 auto;
+	}
+
+	.page-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 20px;
+	}
+	.page-title {
+		font-family: 'Space Grotesk', system-ui, sans-serif;
+		font-size: 18px;
+		font-weight: 700;
+		color: #f0f0ff;
+		letter-spacing: -0.01em;
+	}
+	.btn-new {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 7px 14px;
+		border-radius: 8px;
+		background: rgba(139,92,246,0.15);
+		border: 1px solid rgba(139,92,246,0.35);
+		color: #a78bfa;
+		font-size: 13px;
+		font-weight: 500;
+		font-family: inherit;
+		cursor: pointer;
+		transition: background 0.15s, border-color 0.15s, color 0.15s;
+	}
+	.btn-new:hover {
+		background: rgba(139,92,246,0.25);
+		border-color: rgba(139,92,246,0.55);
+		color: #c4b5fd;
 	}
 
 	.empty-state {

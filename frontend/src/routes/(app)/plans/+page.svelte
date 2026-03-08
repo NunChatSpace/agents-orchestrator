@@ -26,6 +26,10 @@
 	// Workers for the selected group (for new session worker selector)
 	$: groupWorkers = $allWorkers.filter((w) => w.group_name === $selectedGroup);
 
+	// Plan sessions filtered to those whose worker belongs to the selected group
+	$: groupWorkerIDs = new Set(groupWorkers.map((w) => w.worker_id));
+	$: filteredSessions = planSessions.filter((s) => groupWorkerIDs.has(s.worker_id));
+
 	// ── State ────────────────────────────────────────────────────────────
 	let planSessions: PlanSession[] = [];
 	let planSessionsLoading = false;
@@ -236,10 +240,16 @@
 			<div class="ps-list-header">
 				<div class="ps-list-top">
 					<span class="ps-list-title">Plan Sessions</span>
-					{#if planSessions.length > 0}
-						<span class="count-badge">{planSessions.length}</span>
+					{#if filteredSessions.length > 0}
+						<span class="count-badge">{filteredSessions.length}</span>
 					{/if}
 				</div>
+				{#if groupWorkers.length === 0}
+				<div class="no-agents-hint">
+					No agents in <strong>{$selectedGroup || 'this workspace'}</strong>.
+					<a href="/agents/new" class="no-agents-link">Add an agent</a> to start planning.
+				</div>
+			{:else}
 				<div class="ps-new-row">
 					<select class="field-select ps-worker-select" bind:value={newSessionWorkerID}>
 						{#each groupWorkers as w}
@@ -253,6 +263,7 @@
 						Let's discuss plan
 					</button>
 				</div>
+			{/if}
 				{#if planError}
 					<div class="plan-error">
 						<span class="plan-error-title">Error</span>
@@ -263,11 +274,11 @@
 
 			{#if planSessionsLoading}
 				<div class="ps-empty">Loading…</div>
-			{:else if planSessions.length === 0}
+			{:else if filteredSessions.length === 0}
 				<div class="ps-empty">No plan sessions yet. Start one above.</div>
 			{:else}
 				<div class="ps-cards">
-					{#each planSessions as session (session.id)}
+					{#each filteredSessions as session (session.id)}
 						<button class="ps-card" on:click={() => openSession(session)}>
 							<div class="ps-card-title">{session.title || 'Untitled session'}</div>
 							<div class="ps-card-meta">
@@ -494,6 +505,19 @@
 	}
 	.discuss-btn:hover:not(:disabled) { box-shadow: 0 0 22px rgba(124,58,237,0.4); }
 	.discuss-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+	.no-agents-hint {
+		font-size: 13px;
+		color: rgba(196,181,253,0.45);
+		padding: 8px 0;
+	}
+	.no-agents-hint strong { color: rgba(196,181,253,0.7); font-weight: 600; }
+	.no-agents-link {
+		color: #a78bfa;
+		text-decoration: underline;
+		text-underline-offset: 2px;
+	}
+	.no-agents-link:hover { color: #c4b5fd; }
 
 	.ps-empty {
 		font-size: 13px;
