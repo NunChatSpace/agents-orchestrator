@@ -1,4 +1,12 @@
 <script lang="ts">
+	import { onMount, tick } from 'svelte';
+	import { marked } from 'marked';
+	import DOMPurify from 'dompurify';
+
+	function renderMd(content: string): string {
+		const html = marked.parse(content, { async: false }) as string;
+		return DOMPurify.sanitize(html);
+	}
 	import { goto } from '$app/navigation';
 	import { allWorkers } from '../../../stores/workers';
 	import { selectedGroup } from '../../../stores/selectedGroup';
@@ -35,6 +43,27 @@
 	let newSessionWorkerID = '';
 	let jobLoading = false;
 	let planError = '';
+	let optimisticMessageCounter = 0;
+	let chatFeed: HTMLElement;
+	let orphanedMessage = ''; // last user msg with no agent reply (interrupted stream)
+
+	async function scrollToBottom() {
+		await tick();
+		chatFeed?.scrollTo({ top: chatFeed.scrollHeight, behavior: 'smooth' });
+	}
+
+	// Scroll when thinking indicator appears
+	$: if (thinkingText || isSending || isGenerating) scrollToBottom();
+
+	function createClientMessageId(): string {
+		const maybeCrypto = globalThis.crypto;
+		if (maybeCrypto && typeof maybeCrypto.randomUUID === 'function') {
+			return maybeCrypto.randomUUID();
+		}
+		optimisticMessageCounter += 1;
+		const rand = Math.random().toString(36).slice(2, 10);
+		return `tmp-${Date.now()}-${optimisticMessageCounter}-${rand}`;
+	}
 
 	// Auto-select first worker for new session
 	$: if (
@@ -44,11 +73,11 @@
 		newSessionWorkerID = groupWorkers[0].worker_id;
 	}
 
-	// Load sessions on mount (once)
-	$: if (!planLoaded) {
+	onMount(() => {
+		if (planLoaded) return;
 		planLoaded = true;
 		loadSessions();
-	}
+	});
 
 	function relativeTime(iso: string): string {
 		const diff = Date.now() - new Date(iso).getTime();
@@ -78,6 +107,10 @@
 		showConfirm = !!full.generated_prompt;
 		composerText = '';
 		thinkingText = '';
+		// Detect interrupted stream: last message is from user with no agent reply
+		const last = chatMessages.at(-1);
+		orphanedMessage = last?.role === 'user' ? last.content : '';
+		scrollToBottom();
 	}
 
 	function backToList() {
@@ -87,6 +120,7 @@
 		showConfirm = false;
 		thinkingText = '';
 		planError = '';
+		orphanedMessage = '';
 		loadSessions();
 	}
 
@@ -110,8 +144,9 @@
 
 		chatMessages = [
 			...chatMessages,
-			{ id: crypto.randomUUID(), role: 'user', content, created_at: new Date().toISOString() }
+			{ id: createClientMessageId(), role: 'user', content, created_at: new Date().toISOString() }
 		];
+		scrollToBottom();
 
 		sendPlanMessage(
 			activeSession.id,
@@ -123,6 +158,7 @@
 				const updated = await getPlanSession(activeSession!.id);
 				activeSession = updated;
 				chatMessages = updated.messages ?? [];
+				scrollToBottom();
 			},
 			(err) => {
 				thinkingText = '';
@@ -279,11 +315,15 @@
 				</div>
 			</div>
 
-			<div class="chat-feed">
+			<div class="chat-feed" bind:this={chatFeed}>
 				{#each chatMessages as msg (msg.id)}
 					<div class="chat-bubble" class:user={msg.role === 'user'} class:agent={msg.role === 'agent'}>
 						<span class="bubble-role">{msg.role === 'user' ? 'You' : 'Agent'}</span>
-						<div class="bubble-content">{msg.content}</div>
+						{#if msg.role === 'user'}
+							<div class="bubble-content">{msg.content}</div>
+						{:else}
+							<div class="bubble-content md-body">{@html renderMd(msg.content)}</div>
+						{/if}
 					</div>
 				{/each}
 
@@ -326,6 +366,15 @@
 					</button>
 				</div>
 			{:else if activeSession.status === 'pending'}
+				{#if orphanedMessage}
+					<div class="orphan-notice">
+						<span class="orphan-icon">⚠</span>
+						<span class="orphan-text">Agent didn't respond to your last message (connection was interrupted).</span>
+						<button class="orphan-resend" on:click={() => { composerText = orphanedMessage; orphanedMessage = ''; }}>
+							Resend
+						</button>
+					</div>
+				{/if}
 				<div class="ps-composer">
 					<textarea
 						class="composer-input"
@@ -513,6 +562,8 @@
 		flex: 1;
 		min-height: 0;
 		max-width: 760px;
+		margin: 0 auto;
+		width: 100%;
 	}
 	.ps-detail-header {
 		display: flex;
@@ -583,8 +634,8 @@
 		border-radius: 10px;
 		font-size: 13px;
 		line-height: 1.6;
-		white-space: pre-wrap;
 	}
+	.chat-bubble.user .bubble-content { white-space: pre-wrap; }
 	.chat-bubble.user .bubble-content {
 		background: linear-gradient(135deg, rgba(124,58,237,0.5), rgba(109,40,217,0.4));
 		border: 1px solid rgba(139,92,246,0.35);
@@ -593,7 +644,94 @@
 	.chat-bubble.agent .bubble-content {
 		background: rgba(13,13,30,0.7);
 		border: 1px solid rgba(139,92,246,0.15);
-		color: rgba(196,181,253,0.85);
+		color: rgba(230,225,255,0.92);
+	}
+
+	/* ── Markdown body styles (md-body) ─────────────────────────────── */
+	/* MessageBubble.svelte is not mounted here, so we define these locally. */
+	:global(.chat-bubble.agent .md-body) { line-height: 1.7; color: rgba(230,225,255,0.92); }
+	:global(.chat-bubble.agent .md-body p) { margin: 0 0 0.65em; }
+	:global(.chat-bubble.agent .md-body p:last-child) { margin-bottom: 0; }
+	:global(.chat-bubble.agent .md-body h1,
+	        .chat-bubble.agent .md-body h2,
+	        .chat-bubble.agent .md-body h3,
+	        .chat-bubble.agent .md-body h4) {
+		font-weight: 700;
+		color: #f0f0ff;
+		margin: 0.9em 0 0.4em;
+		line-height: 1.3;
+	}
+	:global(.chat-bubble.agent .md-body h1) { font-size: 1.1em; }
+	:global(.chat-bubble.agent .md-body h2) { font-size: 1.02em; }
+	:global(.chat-bubble.agent .md-body h3,
+	        .chat-bubble.agent .md-body h4) { font-size: 0.95em; }
+	:global(.chat-bubble.agent .md-body ul,
+	        .chat-bubble.agent .md-body ol) {
+		margin: 0.4em 0 0.65em;
+		padding-left: 1.5em;
+	}
+	:global(.chat-bubble.agent .md-body li) { margin-bottom: 0.3em; }
+	:global(.chat-bubble.agent .md-body code) {
+		font-family: 'SFMono-Regular', Consolas, monospace;
+		font-size: 0.85em;
+		background: rgba(139,92,246,0.15);
+		border: 1px solid rgba(139,92,246,0.25);
+		border-radius: 4px;
+		padding: 1px 5px;
+		color: #c4b5fd;
+		word-break: break-all;
+	}
+	:global(.chat-bubble.agent .md-body pre) {
+		background: rgba(8,8,20,0.85);
+		border: 1px solid rgba(139,92,246,0.2);
+		border-radius: 8px;
+		padding: 12px 14px;
+		overflow-x: auto;
+		margin: 0.55em 0;
+	}
+	:global(.chat-bubble.agent .md-body pre code) {
+		background: none;
+		border: none;
+		padding: 0;
+		font-size: 0.84em;
+		color: rgba(220,210,255,0.92);
+		word-break: normal;
+	}
+	:global(.chat-bubble.agent .md-body blockquote) {
+		border-left: 3px solid rgba(139,92,246,0.45);
+		margin: 0.5em 0;
+		padding: 4px 12px;
+		color: rgba(196,181,253,0.65);
+		font-style: italic;
+	}
+	:global(.chat-bubble.agent .md-body strong) { color: #f0f0ff; font-weight: 700; }
+	:global(.chat-bubble.agent .md-body em) { color: rgba(196,181,253,0.85); }
+	:global(.chat-bubble.agent .md-body hr) {
+		border: none;
+		border-top: 1px solid rgba(139,92,246,0.15);
+		margin: 0.75em 0;
+	}
+	:global(.chat-bubble.agent .md-body a) {
+		color: #a78bfa;
+		text-decoration: underline;
+		text-underline-offset: 2px;
+	}
+	:global(.chat-bubble.agent .md-body table) {
+		border-collapse: collapse;
+		width: 100%;
+		margin: 0.5em 0;
+		font-size: 0.88em;
+	}
+	:global(.chat-bubble.agent .md-body th,
+	        .chat-bubble.agent .md-body td) {
+		border: 1px solid rgba(139,92,246,0.2);
+		padding: 5px 10px;
+		text-align: left;
+	}
+	:global(.chat-bubble.agent .md-body th) {
+		background: rgba(139,92,246,0.1);
+		color: rgba(196,181,253,0.9);
+		font-weight: 600;
 	}
 
 	.thinking-indicator {
@@ -625,6 +763,43 @@
 		-webkit-line-clamp: 2;
 		-webkit-box-orient: vertical;
 	}
+
+	/* Orphaned message notice */
+	.orphan-notice {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 8px 12px;
+		background: rgba(234,179,8,0.07);
+		border: 1px solid rgba(234,179,8,0.22);
+		border-radius: 8px;
+		flex-shrink: 0;
+		margin-bottom: 4px;
+	}
+	.orphan-icon {
+		font-size: 12px;
+		color: rgba(253,224,71,0.7);
+		flex-shrink: 0;
+	}
+	.orphan-text {
+		flex: 1;
+		font-size: 12px;
+		color: rgba(253,224,71,0.65);
+	}
+	.orphan-resend {
+		padding: 4px 10px;
+		border-radius: 6px;
+		background: rgba(234,179,8,0.12);
+		border: 1px solid rgba(234,179,8,0.3);
+		color: rgba(253,224,71,0.85);
+		font-size: 12px;
+		font-weight: 500;
+		font-family: inherit;
+		cursor: pointer;
+		flex-shrink: 0;
+		transition: background 0.15s;
+	}
+	.orphan-resend:hover { background: rgba(234,179,8,0.2); }
 
 	/* Composer */
 	.ps-composer {

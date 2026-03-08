@@ -3,17 +3,27 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { get } from 'svelte/store';
-	import { isSignedIn } from '../../stores/auth';
+	import { user, isSignedIn } from '../../stores/auth';
 	import { allJobs } from '../../stores/jobs';
 	import { allWorkers } from '../../stores/workers';
 	import { selectedGroup } from '../../stores/selectedGroup';
 	import { listJobs } from '../../lib/apis/jobs';
 	import { listWorkers } from '../../lib/apis/workers';
+	import { getMe } from '../../lib/apis/auth';
+	import { connectWS } from '../../stores/ws';
 
 	onMount(async () => {
+		// Root layout's getMe() runs concurrently — if user store not yet populated,
+		// try getMe() ourselves before deciding to redirect.
 		if (!get(isSignedIn)) {
-			goto('/login');
-			return;
+			try {
+				const u = await getMe();
+				user.set(u);
+				connectWS();
+			} catch {
+				goto('/login');
+				return;
+			}
 		}
 		try {
 			const [jobs, workers] = await Promise.all([listJobs({}), listWorkers()]);

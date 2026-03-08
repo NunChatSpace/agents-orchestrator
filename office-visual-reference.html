@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Office Map — Visual Style Reference</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Grotesk:wght@400;500;700&display=swap');
+
+  :root {
+    --nx-bg: #05050c;
+    --nx-surface: #0e0e20;
+    --nx-violet: #7c3aed;
+    --nx-vb: #8b5cf6;
+    --nx-lav: #a78bfa;
+    --nx-soft: #c4b5fd;
+    --nx-border: rgba(139,92,246,0.18);
+    --nx-borderb: rgba(139,92,246,0.40);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--nx-bg);
+    color: #e2e8f0;
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+  }
+
+  /* Crosshatch overlay */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(139,92,246,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(139,92,246,0.025) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrapper {
+    position: relative;
+    z-index: 1;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 40px 24px;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+
+  header h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--nx-soft);
+    margin-bottom: 8px;
+  }
+
+  header p {
+    color: #6b7280;
+    font-size: 14px;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 32px;
+    flex-wrap: wrap;
+  }
+
+  .tab {
+    padding: 8px 20px;
+    border: 1px solid var(--nx-border);
+    border-radius: 6px;
+    background: var(--nx-surface);
+    color: #6b7280;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: 'Inter', sans-serif;
+    transition: all 0.2s;
+  }
+
+  .tab:hover { border-color: var(--nx-borderb); color: var(--nx-lav); }
+  .tab.active {
+    background: rgba(124,58,237,0.2);
+    border-color: var(--nx-vb);
+    color: var(--nx-soft);
+    box-shadow: 0 0 12px rgba(139,92,246,0.3);
+  }
+
+  .demo-panel {
+    display: none;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .demo-panel.active { display: flex; }
+
+  .label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #6b7280;
+    margin-bottom: 8px;
+  }
+
+  canvas {
+    border: 1px solid var(--nx-border);
+    border-radius: 10px;
+    display: block;
+  }
+
+  .description {
+    background: var(--nx-surface);
+    border: 1px solid var(--nx-border);
+    border-radius: 10px;
+    padding: 20px 24px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #9ca3af;
+  }
+
+  .description strong {
+    color: var(--nx-soft);
+    display: block;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 15px;
+    margin-bottom: 8px;
+  }
+
+  .pros-cons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 12px;
+  }
+
+  .pros-cons div {
+    background: rgba(0,0,0,0.3);
+    border-radius: 6px;
+    padding: 12px 16px;
+  }
+
+  .pros-cons .pro { border-left: 3px solid #10b981; }
+  .pros-cons .con { border-left: 3px solid #ef4444; }
+
+  .pros-cons span {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  .pro span { color: #10b981; }
+  .con span { color: #ef4444; }
+
+  .pros-cons ul { list-style: none; padding: 0; }
+  .pros-cons li { font-size: 12px; color: #9ca3af; padding: 2px 0; }
+  .pros-cons li::before { content: '• '; color: #4b5563; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <header>
+    <h1>◈ NEXUS — Office Map Visual Reference</h1>
+    <p>เลือก style ที่ถูกใจเพื่อใช้เป็นแนวทางในการ implement</p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('topdown')">A · Top-Down Classic</button>
+    <button class="tab" onclick="showTab('enhanced')">B · Enhanced Glow</button>
+    <button class="tab" onclick="showTab('isometric')">C · Isometric 2.5D</button>
+    <button class="tab" onclick="showTab('scanline')">D · Cyber Scanline</button>
+  </div>
+
+  <!-- A: Top-Down Classic -->
+  <div id="tab-topdown" class="demo-panel active">
+    <div>
+      <div class="label">Preview — Top-Down Classic (ตามที่ spec กำหนดไว้ตอนแรก)</div>
+      <canvas id="c-topdown" width="900" height="460"></canvas>
+    </div>
+    <div class="description">
+      <strong>A · Top-Down Classic</strong>
+      Style พื้นฐานแบบ Gather.town — มองจากบนลงล่าง tile-based grid สะอาด อ่านง่าย
+      <div class="pros-cons">
+        <div class="pro"><span>✓ ข้อดี</span><ul><li>implement ง่ายที่สุด</li><li>ชัดเจน อ่านง่าย</li><li>performance ดี</li></ul></div>
+        <div class="con"><span>✗ ข้อเสีย</span><ul><li>ดู flat</li><li>ไม่ impressive มากนัก</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- B: Enhanced Glow -->
+  <div id="tab-enhanced" class="demo-panel">
+    <div>
+      <div class="label">Preview — Enhanced Glow + Ambient Particles</div>
+      <canvas id="c-enhanced" width="900" height="460"></canvas>
+    </div>
+    <div class="description">
+      <strong>B · Enhanced Glow + Ambient</strong>
+      Top-down เหมือนเดิม แต่เพิ่ม status glow rings, ambient floating particles รอบ desk, monitor flicker animation — ยังคง NEXUS cyber-premium feel
+      <div class="pros-cons">
+        <div class="pro"><span>✓ ข้อดี</span><ul><li>สวยและ on-brand มาก</li><li>ไม่เปลี่ยน core architecture</li><li>implement ต่อจาก A ได้เลย</li></ul></div>
+        <div class="con"><span>✗ ข้อเสีย</span><ul><li>particle system เพิ่ม complexity เล็กน้อย</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- C: Isometric -->
+  <div id="tab-isometric" class="demo-panel">
+    <div>
+      <div class="label">Preview — Isometric 2.5D</div>
+      <canvas id="c-isometric" width="900" height="460"></canvas>
+    </div>
+    <div class="description">
+      <strong>C · Isometric 2.5D</strong>
+      มองในมุม isometric (45° + tilt) ให้ความรู้สึก 3D — desk และ NPC มีความลึก สวยมาก
+      <div class="pros-cons">
+        <div class="pro"><span>✓ ข้อดี</span><ul><li>ดูสวยและน่าประทับใจที่สุด</li><li>แตกต่างจาก Gather.town</li><li>รู้สึก premium</li></ul></div>
+        <div class="con"><span>✗ ข้อเสีย</span><ul><li>collision + movement ซับซ้อนกว่า</li><li>ใช้เวลา implement มากขึ้น ~2x</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- D: Cyber Scanline -->
+  <div id="tab-scanline" class="demo-panel">
+    <div>
+      <div class="label">Preview — Cyber Scanline + Neon</div>
+      <canvas id="c-scanline" width="900" height="460"></canvas>
+    </div>
+    <div class="description">
+      <strong>D · Cyber Scanline + Neon</strong>
+      Top-down แต่เพิ่ม CRT scanline overlay, vignette, neon sign elements, glitch flicker — เข้ากับ NEXUS theme มากที่สุด
+      <div class="pros-cons">
+        <div class="pro"><span>✓ ข้อดี</span><ul><li>เข้า NEXUS aesthetic สุดๆ</li><li>unique มาก</li><li>สามารถ combine กับ B ได้</li></ul></div>
+        <div class="con"><span>✗ ข้อเสีย</span><ul><li>scanline อาจทำให้อ่านยากบาง monitor</li><li>ต้องทดสอบ accessibility</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    const names = ['topdown','enhanced','isometric','scanline'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.demo-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  // Re-render canvases when switching
+  setTimeout(() => renderAll(), 50);
+}
+
+// ─────────────────────────────────────────────
+// SHARED CONSTANTS
+const TILE = 40;
+const COLORS = {
+  bg: '#05050c',
+  surface: '#0e0e20',
+  floor: '#0a0a18',
+  floorAlt: '#0d0d1e',
+  wall: '#1a1a30',
+  wallTop: '#252540',
+  desk: '#141428',
+  deskBorder: 'rgba(139,92,246,0.4)',
+  violet: '#7c3aed',
+  vb: '#8b5cf6',
+  lav: '#a78bfa',
+  soft: '#c4b5fd',
+  idle: '#10b981',
+  busy: '#f97316',
+  pendingUser: '#3b82f6',
+  offline: '#374151',
+};
+
+const WORKERS = [
+  { name: 'fi-backend1', group: 'fi-backend', status: 'idle',    x: 2, y: 2 },
+  { name: 'fi-backend2', group: 'fi-backend', status: 'busy',    x: 5, y: 2 },
+  { name: 'fi-frontend1',group: 'fi-frontend',status: 'pending_user', x: 2, y: 6 },
+  { name: 'fi-frontend2',group: 'fi-frontend',status: 'offline', x: 5, y: 6 },
+  { name: 'ib-kha',       group: 'ib-kha',     status: 'idle',    x: 8, y: 4 },
+];
+
+function statusColor(s) {
+  return { idle: COLORS.idle, busy: COLORS.busy, pending_user: COLORS.pendingUser, offline: COLORS.offline }[s] || COLORS.offline;
+}
+
+// ─────────────────────────────────────────────
+// A: TOP-DOWN CLASSIC
+function renderTopDown() {
+  const c = document.getElementById('c-topdown');
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+
+  // Background
+  ctx.fillStyle = COLORS.floor;
+  ctx.fillRect(0, 0, W, H);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(139,92,246,0.06)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x < W; x += TILE) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for (let y = 0; y < H; y += TILE) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+  // Group zones
+  drawZone(ctx, 0, 0, 7, 4.5, 'fi-backend');
+  drawZone(ctx, 0, 4.5, 7, 4.5, 'fi-frontend');
+  drawZone(ctx, 7, 0, 5.5, 9, 'ib-kha');
+
+  // Desks + NPCs
+  WORKERS.forEach(w => drawTopDownDesk(ctx, w));
+
+  // Player avatar
+  drawPlayer(ctx, 10 * TILE + 20, 4 * TILE + 20);
+
+  // Proximity ring around nearest
+  ctx.strokeStyle = 'rgba(139,92,246,0.3)';
+  ctx.setLineDash([4,4]);
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(8 * TILE + 20, 4 * TILE + 20, TILE * 2.5, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Proximity prompt
+  ctx.fillStyle = 'rgba(139,92,246,0.85)';
+  roundRect(ctx, 8*TILE - 50, 4*TILE - 28, 140, 22, 4);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = '600 11px Inter';
+  ctx.textAlign = 'center';
+  ctx.fillText('Press E to interact', 8*TILE + 20, 4*TILE - 13);
+  ctx.textAlign = 'left';
+}
+
+function drawZone(ctx, tx, ty, tw, th, label) {
+  const x = tx * TILE, y = ty * TILE, w = tw * TILE, h = th * TILE;
+  ctx.fillStyle = 'rgba(139,92,246,0.03)';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = 'rgba(139,92,246,0.12)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x+0.5, y+0.5, w-1, h-1);
+  ctx.fillStyle = 'rgba(139,92,246,0.25)';
+  ctx.font = '600 10px Inter';
+  ctx.letterSpacing = '0.1em';
+  ctx.fillText(label.toUpperCase(), x + 8, y + 14);
+  ctx.letterSpacing = '';
+}
+
+function drawTopDownDesk(ctx, w) {
+  const x = w.x * TILE, y = w.y * TILE;
+  const sc = statusColor(w.status);
+
+  // Desk body
+  ctx.fillStyle = COLORS.desk;
+  ctx.strokeStyle = COLORS.deskBorder;
+  ctx.lineWidth = 1;
+  roundRect(ctx, x+2, y+2, TILE*1.5-4, TILE-4, 4);
+  ctx.fill(); ctx.stroke();
+
+  // Monitor glow
+  ctx.fillStyle = `${sc}22`;
+  ctx.fillRect(x+8, y+6, TILE*0.8, TILE*0.45);
+  ctx.fillStyle = `${sc}66`;
+  ctx.fillRect(x+10, y+8, TILE*0.7, TILE*0.35);
+
+  // NPC
+  drawNPC(ctx, x + TILE*0.75, y - 18, sc);
+
+  // Name tag
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  roundRect(ctx, x+2, y + TILE + 2, TILE*1.5-4, 16, 3);
+  ctx.fill();
+  ctx.fillStyle = COLORS.soft;
+  ctx.font = '600 9px Inter';
+  ctx.textAlign = 'center';
+  ctx.fillText(w.name, x + TILE*0.75, y + TILE + 13);
+  ctx.textAlign = 'left';
+}
+
+function drawNPC(ctx, cx, cy, color) {
+  // Head
+  ctx.fillStyle = '#e2e8f0';
+  ctx.beginPath(); ctx.arc(cx, cy, 7, 0, Math.PI*2); ctx.fill();
+  // Body
+  ctx.fillStyle = color + 'cc';
+  ctx.fillRect(cx-5, cy+8, 10, 10);
+  // Status dot
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(cx+8, cy-4, 3.5, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = '#05050c';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+}
+
+function drawPlayer(ctx, px, py) {
+  // Shadow
+  ctx.fillStyle = 'rgba(139,92,246,0.2)';
+  ctx.beginPath(); ctx.ellipse(px, py+16, 8, 4, 0, 0, Math.PI*2); ctx.fill();
+  // Head
+  ctx.fillStyle = '#f1f5f9';
+  ctx.beginPath(); ctx.arc(px, py, 8, 0, Math.PI*2); ctx.fill();
+  // Body
+  ctx.fillStyle = '#7c3aed';
+  ctx.fillRect(px-6, py+9, 12, 11);
+  // Glow ring
+  ctx.strokeStyle = 'rgba(139,92,246,0.5)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(px, py, 14, 0, Math.PI*2); ctx.stroke();
+  // Label
+  ctx.fillStyle = COLORS.soft;
+  ctx.font = '600 10px Inter';
+  ctx.textAlign = 'center';
+  ctx.fillText('You', px, py - 22);
+  ctx.textAlign = 'left';
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y);
+  ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r);
+  ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h);
+  ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r);
+  ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+}
+
+// ─────────────────────────────────────────────
+// B: ENHANCED GLOW
+let particleT = 0;
+function renderEnhanced(t) {
+  const c = document.getElementById('c-enhanced');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+
+  ctx.fillStyle = COLORS.floor;
+  ctx.fillRect(0, 0, W, H);
+
+  // Subtle grid
+  ctx.strokeStyle = 'rgba(139,92,246,0.05)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x < W; x += TILE) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for (let y = 0; y < H; y += TILE) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+  // Zones
+  drawZone(ctx, 0, 0, 7, 4.5, 'fi-backend');
+  drawZone(ctx, 0, 4.5, 7, 4.5, 'fi-frontend');
+  drawZone(ctx, 7, 0, 5.5, 9, 'ib-kha');
+
+  // Enhanced desks
+  WORKERS.forEach(w => drawEnhancedDesk(ctx, w, t));
+
+  // Player
+  drawPlayer(ctx, 10 * TILE + 20, 4 * TILE + 20);
+
+  // Floating particles
+  drawParticles(ctx, t, W, H);
+}
+
+function drawEnhancedDesk(ctx, w, t) {
+  const x = w.x * TILE, y = w.y * TILE;
+  const sc = statusColor(w.status);
+  const pulse = Math.sin(t * 0.002) * 0.5 + 0.5;
+
+  // Glow halo behind desk
+  if (w.status !== 'offline') {
+    const grad = ctx.createRadialGradient(x+TILE*0.75, y+TILE*0.5, 5, x+TILE*0.75, y+TILE*0.5, TILE*1.5);
+    grad.addColorStop(0, sc + '33');
+    grad.addColorStop(1, 'transparent');
+    ctx.fillStyle = grad;
+    ctx.fillRect(x - TILE*0.5, y - TILE*0.5, TILE*3, TILE*3);
+  }
+
+  // Desk
+  ctx.fillStyle = COLORS.desk;
+  ctx.strokeStyle = sc + '66';
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, x+2, y+2, TILE*1.5-4, TILE-4, 4);
+  ctx.fill(); ctx.stroke();
+
+  // Monitor glow with flicker
+  const flicker = w.status === 'busy' ? 0.7 + Math.sin(t * 0.01) * 0.3 : 1;
+  ctx.globalAlpha = flicker;
+  ctx.fillStyle = sc + '44';
+  ctx.fillRect(x+8, y+6, TILE*0.8, TILE*0.45);
+  ctx.globalAlpha = 1;
+
+  // Pulsing status ring
+  if (w.status !== 'offline') {
+    ctx.strokeStyle = sc + Math.round(40 + pulse * 80).toString(16).padStart(2,'0');
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x + TILE*0.75, y - 18, 10 + pulse * 4, 0, Math.PI*2);
+    ctx.stroke();
+  }
+
+  // NPC
+  drawNPC(ctx, x + TILE*0.75, y - 18, sc);
+
+  // Name
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  roundRect(ctx, x+2, y + TILE + 2, TILE*1.5-4, 16, 3);
+  ctx.fill();
+  ctx.fillStyle = COLORS.soft;
+  ctx.font = '600 9px Inter';
+  ctx.textAlign = 'center';
+  ctx.fillText(w.name, x + TILE*0.75, y + TILE + 13);
+  ctx.textAlign = 'left';
+}
+
+function drawParticles(ctx, t, W, H) {
+  // 20 ambient particles drifting upward
+  for (let i = 0; i < 20; i++) {
+    const seed = i * 137.508;
+    const px = (Math.sin(seed) * 0.5 + 0.5) * W;
+    const py = ((H - ((t * 0.02 + seed * 10) % H)) + H) % H;
+    const alpha = Math.sin(t * 0.001 + seed) * 0.3 + 0.15;
+    const size = 1 + (seed % 3) * 0.5;
+    ctx.fillStyle = `rgba(139,92,246,${alpha})`;
+    ctx.beginPath();
+    ctx.arc(px, py, size, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
+// ─────────────────────────────────────────────
+// C: ISOMETRIC
+function renderIsometric() {
+  const c = document.getElementById('c-isometric');
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+
+  ctx.fillStyle = '#030309';
+  ctx.fillRect(0, 0, W, H);
+
+  const ISO_W = 48, ISO_H = 24;
+  const OX = W/2, OY = 80;
+
+  function toIso(tx, ty) {
+    return {
+      x: OX + (tx - ty) * ISO_W/2,
+      y: OY + (tx + ty) * ISO_H/2
+    };
+  }
+
+  // Draw floor tiles
+  for (let ty = 0; ty < 9; ty++) {
+    for (let tx = 0; tx < 11; tx++) {
+      const p = toIso(tx, ty);
+      drawIsoTile(ctx, p.x, p.y, ISO_W, ISO_H, tx, ty);
+    }
+  }
+
+  // Draw desks (sorted by depth)
+  const deskPositions = [
+    { name: 'fi-backend1', status: 'idle', tx: 2, ty: 2 },
+    { name: 'fi-backend2', status: 'busy', tx: 5, ty: 2 },
+    { name: 'fi-frontend1', status: 'pending_user', tx: 2, ty: 6 },
+    { name: 'fi-frontend2', status: 'offline', tx: 5, ty: 6 },
+    { name: 'ib-kha', status: 'idle', tx: 8, ty: 4 },
+  ].sort((a, b) => (a.tx + a.ty) - (b.tx + b.ty));
+
+  deskPositions.forEach(d => {
+    const p = toIso(d.tx, d.ty);
+    drawIsoDesk(ctx, p.x, p.y, ISO_W, ISO_H, d);
+  });
+
+  // Player
+  const pp = toIso(10, 4);
+  drawIsoPlayer(ctx, pp.x, pp.y, ISO_W, ISO_H);
+
+  // Zone labels
+  ctx.fillStyle = 'rgba(139,92,246,0.4)';
+  ctx.font = '600 10px Inter';
+  ctx.textAlign = 'center';
+  const lp1 = toIso(3.5, 0.5);
+  ctx.fillText('FI-BACKEND', lp1.x, lp1.y - 10);
+  const lp2 = toIso(3.5, 4.5);
+  ctx.fillText('FI-FRONTEND', lp2.x, lp2.y - 10);
+  const lp3 = toIso(9, 1.5);
+  ctx.fillText('IB-KHA', lp3.x, lp3.y - 10);
+  ctx.textAlign = 'left';
+}
+
+function drawIsoTile(ctx, x, y, tw, th, tx, ty) {
+  const isDark = (tx + ty) % 2 === 0;
+  ctx.beginPath();
+  ctx.moveTo(x, y - th/2);
+  ctx.lineTo(x + tw/2, y);
+  ctx.lineTo(x, y + th/2);
+  ctx.lineTo(x - tw/2, y);
+  ctx.closePath();
+  ctx.fillStyle = isDark ? '#080812' : '#0a0a16';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(139,92,246,0.08)';
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+}
+
+function drawIsoDesk(ctx, x, y, tw, th, d) {
+  const sc = statusColor(d.status);
+  const dh = 28; // desk height (3D box height)
+
+  // Side face (right)
+  ctx.beginPath();
+  ctx.moveTo(x, y + th/2);
+  ctx.lineTo(x + tw/2, y);
+  ctx.lineTo(x + tw/2, y - dh);
+  ctx.lineTo(x, y + th/2 - dh);
+  ctx.closePath();
+  ctx.fillStyle = '#0e0e1c';
+  ctx.fill();
+  ctx.strokeStyle = sc + '44';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Side face (left)
+  ctx.beginPath();
+  ctx.moveTo(x, y + th/2);
+  ctx.lineTo(x - tw/2, y);
+  ctx.lineTo(x - tw/2, y - dh);
+  ctx.lineTo(x, y + th/2 - dh);
+  ctx.closePath();
+  ctx.fillStyle = '#12121f';
+  ctx.fill();
+  ctx.strokeStyle = sc + '44';
+  ctx.stroke();
+
+  // Top face
+  ctx.beginPath();
+  ctx.moveTo(x, y - dh - th/2);
+  ctx.lineTo(x + tw/2, y - dh);
+  ctx.lineTo(x, y + th/2 - dh);
+  ctx.lineTo(x - tw/2, y - dh);
+  ctx.closePath();
+  ctx.fillStyle = COLORS.desk;
+  ctx.fill();
+  ctx.strokeStyle = sc + '88';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Monitor on desk
+  ctx.fillStyle = sc + '55';
+  ctx.beginPath();
+  ctx.moveTo(x - 4, y - dh - 2);
+  ctx.lineTo(x + 10, y - dh - 9);
+  ctx.lineTo(x + 10, y - dh - 22);
+  ctx.lineTo(x - 4, y - dh - 15);
+  ctx.closePath();
+  ctx.fill();
+
+  // NPC on desk
+  const nx = x + tw*0.1, ny = y - dh - 14;
+  ctx.fillStyle = '#e2e8f0';
+  ctx.beginPath(); ctx.arc(nx, ny - 7, 5, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = sc + 'cc';
+  ctx.fillRect(nx-4, ny - 1, 8, 8);
+
+  // Status dot
+  ctx.fillStyle = sc;
+  ctx.beginPath(); ctx.arc(nx + 7, ny - 10, 3, 0, Math.PI*2); ctx.fill();
+
+  // Name
+  ctx.fillStyle = COLORS.soft;
+  ctx.font = '600 9px Inter';
+  ctx.textAlign = 'center';
+  ctx.fillText(d.name, x, y - dh - 36);
+  ctx.textAlign = 'left';
+}
+
+function drawIsoPlayer(ctx, x, y, tw, th) {
+  ctx.fillStyle = '#e2e8f0';
+  ctx.beginPath(); ctx.arc(x, y - th - 6, 6, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#7c3aed';
+  ctx.fillRect(x-5, y - th + 1, 10, 8);
+  ctx.strokeStyle = 'rgba(139,92,246,0.6)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(x, y - th - 6, 12, 0, Math.PI*2); ctx.stroke();
+  ctx.fillStyle = COLORS.soft;
+  ctx.font = '600 10px Inter';
+  ctx.textAlign = 'center';
+  ctx.fillText('You', x, y - th - 22);
+  ctx.textAlign = 'left';
+}
+
+// ─────────────────────────────────────────────
+// D: CYBER SCANLINE
+function renderScanline(t) {
+  const c = document.getElementById('c-scanline');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+
+  // Base render (same as top-down)
+  ctx.fillStyle = COLORS.floor;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.strokeStyle = 'rgba(139,92,246,0.07)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x < W; x += TILE) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for (let y = 0; y < H; y += TILE) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+  drawZone(ctx, 0, 0, 7, 4.5, 'fi-backend');
+  drawZone(ctx, 0, 4.5, 7, 4.5, 'fi-frontend');
+  drawZone(ctx, 7, 0, 5.5, 9, 'ib-kha');
+
+  WORKERS.forEach(w => drawTopDownDesk(ctx, w));
+  drawPlayer(ctx, 10 * TILE + 20, 4 * TILE + 20);
+
+  // Neon sign decorations
+  drawNeonSign(ctx, 40, 10, 'NEXUS OFFICE v1.0');
+  drawNeonSign(ctx, W - 280, H - 26, `UPTIME: ${Math.floor(t/1000)}s  ◈  ALL SYSTEMS`);
+
+  // Moving scan line
+  const scanY = (t * 0.05) % H;
+  const scanGrad = ctx.createLinearGradient(0, scanY - 20, 0, scanY + 20);
+  scanGrad.addColorStop(0, 'transparent');
+  scanGrad.addColorStop(0.5, 'rgba(139,92,246,0.08)');
+  scanGrad.addColorStop(1, 'transparent');
+  ctx.fillStyle = scanGrad;
+  ctx.fillRect(0, scanY - 20, W, 40);
+
+  // CRT scanlines overlay
+  ctx.globalAlpha = 0.07;
+  for (let sy = 0; sy < H; sy += 3) {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, sy, W, 1);
+  }
+  ctx.globalAlpha = 1;
+
+  // Vignette
+  const vig = ctx.createRadialGradient(W/2, H/2, H*0.3, W/2, H/2, H*0.8);
+  vig.addColorStop(0, 'transparent');
+  vig.addColorStop(1, 'rgba(0,0,0,0.5)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, W, H);
+
+  // Corner brackets
+  ctx.strokeStyle = 'rgba(139,92,246,0.4)';
+  ctx.lineWidth = 2;
+  const bSize = 20;
+  [[0,0],[W,0],[0,H],[W,H]].forEach(([cx,cy]) => {
+    const sx = cx === 0 ? 1 : -1, sy = cy === 0 ? 1 : -1;
+    ctx.beginPath(); ctx.moveTo(cx + sx*bSize, cy); ctx.lineTo(cx, cy); ctx.lineTo(cx, cy + sy*bSize); ctx.stroke();
+  });
+}
+
+function drawNeonSign(ctx, x, y, text) {
+  ctx.font = '600 11px "Space Grotesk", Inter';
+  ctx.shadowColor = '#a78bfa';
+  ctx.shadowBlur = 8;
+  ctx.fillStyle = 'rgba(167,139,250,0.7)';
+  ctx.fillText(text, x, y);
+  ctx.shadowBlur = 0;
+}
+
+// ─────────────────────────────────────────────
+// ANIMATION LOOP
+let startT = null;
+
+function renderAll(t) {
+  if (!startT) startT = t || 0;
+  const elapsed = (t || 0) - startT;
+
+  renderTopDown();
+  renderEnhanced(elapsed);
+  renderIsometric();
+  renderScanline(elapsed);
+
+  requestAnimationFrame(renderAll);
+}
+
+renderAll(0);
+</script>
+</body>
+</html>

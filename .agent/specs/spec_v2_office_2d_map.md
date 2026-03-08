@@ -334,11 +334,119 @@ No new endpoints required. The office page uses existing:
 - `GET /api/v1/workers` — load all worker positions + statuses
 - WebSocket hub — live worker status updates
 - `POST /api/v1/jobs` + `POST /api/v1/jobs/{id}/submit` — job dispatch
-- `GET /api/v1/workers/{id}/jobs` — recent jobs for panel
+- `GET /api/v1/jobs` — recent jobs for panel (filtered client-side by `assigned_worker_id`)
 
 ---
 
-## 13. Non-Goals for v2 (Office)
+## 13. Agent Persona System
+
+### 13.1 Overview
+
+Each worker agent can be assigned a **persona** — a cyberpunk character archetype that determines how their NPC sprite looks on the Office map. Persona is set per-agent in the Settings page and stored in the database.
+
+This section defines planned v2 behavior. It is not part of current v1 office behavior until implementation is completed.
+
+### 13.2 Available Personas
+
+| Persona ID | Name | Visual Style | Primary Color |
+|---|---|---|---|
+| `netrunner` | Netrunner | Sleek, hooded, data-stream cyberware (Songbird-style) | Cyan `#00f0ff` |
+| `tech` | Tech | Mechanical arms, tool belt, goggle visor | Amber `#f59e0b` |
+| `fixer` | Fixer | Long coat, calm posture, minimal cyberware | Gold `#eab308` |
+| `solo` | Solo | Combat armor, broad build, red visor | Red `#ef4444` |
+| `nomad` | Nomad | Rugged jacket, worn aesthetic, earth tones | Orange `#f97316` |
+
+Default persona if not set: `netrunner`.
+
+### 13.3 Backend Changes
+
+```sql
+-- Additive migration (no breaking change)
+ALTER TABLE workers ADD COLUMN persona VARCHAR(32) DEFAULT 'netrunner';
+```
+
+Allowed values enforced at service layer: `netrunner | tech | fixer | solo | nomad`.
+
+`PATCH /api/v1/workers/{id}` — accepts optional `persona` field alongside existing fields.
+
+Worker API response includes `persona` field.
+
+### 13.4 Settings Page — Persona Selector
+
+Agent Settings page (`/agents/{id}/settings`) gains a **Persona** section:
+
+- Visual grid of 5 persona cards — each showing:
+  - Persona name
+  - Small sprite preview (canvas-drawn, same as office NPC)
+  - Short description (e.g. "Netrunner — data specialist, sleek cyberware")
+- Selected card highlighted with neon border
+- Auto-saves on click via `PATCH /api/v1/workers/{id}` — no extra submit button needed
+
+### 13.5 NPC Sprite Design per Persona
+
+Each persona has a unique pixel sprite drawn programmatically via Canvas API. All sprites follow the Cyberpunk Songbird art direction (dark palette, neon accents, cyberware details).
+
+**Netrunner (default — Songbird-style):**
+- Slim build, hooded silhouette
+- Cyan spine cyberware line running down the back
+- Data stream particles floating around wrists
+- Color: Cyan
+
+**Tech:**
+- Stocky build, mechanical shoulder mount
+- Amber visor glow
+- Tool/wrench detail at hip
+- Color: Amber
+
+**Fixer:**
+- Long coat silhouette, slightly taller
+- Gold collar/lapel highlight
+- Cigarette ember glow (small orange dot)
+- Color: Gold
+
+**Solo:**
+- Broad-shouldered, armored chest
+- Red visor across face
+- Angular, combat-ready stance
+- Color: Red
+
+**Nomad:**
+- Rugged layered jacket
+- Dusty texture (lower opacity base)
+- Orange scarf detail
+- Color: Orange
+
+### 13.6 Office Map Integration
+
+`npcRenderer.ts` reads `worker.persona` and delegates to a persona-specific draw function:
+
+```typescript
+// npcRenderer.ts
+const PERSONA_RENDERERS: Record<string, PersonaRenderer> = {
+  netrunner: drawNetrunner,
+  tech:      drawTech,
+  fixer:     drawFixer,
+  solo:      drawSolo,
+  nomad:     drawNomad,
+};
+
+export function drawWorkerNPC(ctx, worker, cx, cy, pulse) {
+  const render = PERSONA_RENDERERS[worker.persona] ?? drawNetrunner;
+  render(ctx, cx, cy, statusColor(worker.status), pulse);
+}
+```
+
+Each renderer accepts `(ctx, cx, cy, statusColor, pulse)` — the status color drives the glow/ring regardless of persona, so idle/busy/offline feedback remains consistent across all character types.
+
+### 13.7 Persona Sprite Preview Component
+
+A small reusable `PersonaSprite.svelte` component renders a live canvas preview of a persona sprite (same draw functions, scaled down). Used in:
+- Settings page persona selector cards
+- Interaction panel agent header (small avatar icon)
+
+---
+
+## 14. Non-Goals for v2 (Office)
 
 - No audio / spatial audio
 - No real-time multiplayer (other humans walking on the map)
@@ -349,36 +457,36 @@ No new endpoints required. The office page uses existing:
 
 ---
 
-## 14. Acceptance Criteria
+## 15. Acceptance Criteria
 
-### 14.1 Map Rendering
+### 15.1 Map Rendering
 - Office map renders at `/office` with tile-based layout
 - Worker agent NPCs appear at configured desk positions
 - Status glow/color reflects real-time worker status
 
-### 14.2 Player Movement
+### 15.2 Player Movement
 - WASD / Arrow keys move the player avatar smoothly
 - Player cannot walk through walls or desk tiles
 
-### 14.3 Proximity Interaction
+### 15.3 Proximity Interaction
 - Interaction prompt appears when within 2 tiles of a worker agent
 - Press E or click agent to open interaction panel
 - Panel shows agent info, recent jobs, and action buttons
 
-### 14.4 Job Dispatch
+### 15.4 Job Dispatch
 - New Job modal opens from panel with pre-filled group + worker
 - Job is submitted successfully and user can navigate to job chat
 
-### 14.5 Real-Time Status
+### 15.5 Real-Time Status
 - Worker status changes (idle → busy etc.) update NPC appearance without page reload
 
-### 14.6 Navigation
+### 15.6 Navigation
 - "Office" nav link in top bar is active on `/office`
 - Links in interaction panel navigate correctly to existing pages
 
 ---
 
-## 15. Open Questions for v3
+## 16. Open Questions for v3
 
 - Should we support map zones with different visual themes per group?
 - Should there be a minimap overlay in the corner?

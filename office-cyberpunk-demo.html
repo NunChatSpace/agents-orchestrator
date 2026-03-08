@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXUS OFFICE — Cyberpunk Songbird</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #03020a;
+    overflow: hidden;
+    font-family: 'Courier New', monospace;
+    cursor: crosshair;
+  }
+  #canvas { display: block; }
+
+  /* HUD overlay */
+  #hud {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* Corner brackets */
+  .corner {
+    position: absolute;
+    width: 28px; height: 28px;
+    border-color: rgba(0,240,255,0.6);
+    border-style: solid;
+  }
+  .corner.tl { top:16px; left:16px; border-width: 2px 0 0 2px; box-shadow: -3px -3px 8px rgba(0,240,255,0.3) inset; }
+  .corner.tr { top:16px; right:16px; border-width: 2px 2px 0 0; box-shadow: 3px -3px 8px rgba(0,240,255,0.3) inset; }
+  .corner.bl { bottom:16px; left:16px; border-width: 0 0 2px 2px; box-shadow: -3px 3px 8px rgba(0,240,255,0.3) inset; }
+  .corner.br { bottom:16px; right:16px; border-width: 0 2px 2px 0; box-shadow: 3px 3px 8px rgba(0,240,255,0.3) inset; }
+
+  /* Top status bar */
+  #topbar {
+    position: absolute;
+    top: 16px; left: 50%;
+    transform: translateX(-50%);
+    display: flex; gap: 24px; align-items: center;
+    padding: 6px 24px;
+    border: 1px solid rgba(0,240,255,0.2);
+    background: rgba(3,2,10,0.85);
+    backdrop-filter: blur(8px);
+    clip-path: polygon(12px 0%, calc(100% - 12px) 0%, 100% 12px, 100% 100%, calc(100% - 12px) 100%, 12px 100%, 0% calc(100% - 12px), 0% 12px);
+  }
+  #topbar .logo {
+    font-size: 13px; font-weight: 700; letter-spacing: 0.2em;
+    color: #00f0ff;
+    text-shadow: 0 0 12px #00f0ff, 0 0 24px rgba(0,240,255,0.4);
+  }
+  #topbar .sep { color: rgba(0,240,255,0.2); font-size: 10px; }
+  #topbar .label {
+    font-size: 10px; letter-spacing: 0.12em;
+    color: rgba(0,240,255,0.5);
+    text-transform: uppercase;
+  }
+  #topbar .val {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+    color: #ff2a6d;
+    text-shadow: 0 0 8px #ff2a6d;
+  }
+
+  /* Bottom status */
+  #bottombar {
+    position: absolute;
+    bottom: 16px; left: 50%;
+    transform: translateX(-50%);
+    padding: 5px 20px;
+    border: 1px solid rgba(255,42,109,0.2);
+    background: rgba(3,2,10,0.8);
+    font-size: 10px; letter-spacing: 0.15em;
+    color: rgba(255,42,109,0.6);
+    text-transform: uppercase;
+    clip-path: polygon(8px 0%, calc(100% - 8px) 0%, 100% 8px, 100% 100%, calc(100% - 8px) 100%, 8px 100%, 0% calc(100% - 8px), 0% 8px);
+  }
+
+  /* Controls hint */
+  #controls {
+    position: absolute;
+    bottom: 48px; left: 20px;
+    padding: 8px 14px;
+    border: 1px solid rgba(0,240,255,0.12);
+    background: rgba(3,2,10,0.7);
+    font-size: 10px;
+    color: rgba(0,240,255,0.35);
+    letter-spacing: 0.08em;
+    line-height: 1.8;
+  }
+  #controls span { color: rgba(0,240,255,0.7); }
+
+  /* Interaction panel */
+  #panel {
+    position: absolute;
+    top: 50%; right: 20px;
+    transform: translateY(-50%) translateX(340px);
+    width: 300px;
+    background: rgba(3,2,10,0.92);
+    border: 1px solid rgba(0,240,255,0.3);
+    clip-path: polygon(16px 0%, 100% 0%, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0% 100%, 0% 16px);
+    padding: 20px;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: auto;
+  }
+  #panel.open { transform: translateY(-50%) translateX(0); }
+  #panel-name {
+    font-size: 14px; font-weight: 700; letter-spacing: 0.12em;
+    color: #00f0ff;
+    text-shadow: 0 0 10px rgba(0,240,255,0.5);
+    margin-bottom: 3px;
+    text-transform: uppercase;
+  }
+  #panel-group {
+    font-size: 10px; letter-spacing: 0.1em;
+    color: rgba(255,42,109,0.7);
+    margin-bottom: 14px;
+    text-transform: uppercase;
+  }
+  .panel-label {
+    font-size: 9px; letter-spacing: 0.15em;
+    color: rgba(0,240,255,0.35);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .panel-status {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 10px;
+    border: 1px solid;
+    font-size: 10px; letter-spacing: 0.1em;
+    margin-bottom: 14px;
+    text-transform: uppercase;
+  }
+  .panel-status.idle { border-color: rgba(0,255,136,0.4); color: #00ff88; }
+  .panel-status.busy { border-color: rgba(255,160,0,0.4); color: #ffa000; }
+  .panel-status.offline { border-color: rgba(100,100,100,0.4); color: #666; }
+  .panel-status.pending_user { border-color: rgba(59,130,246,0.4); color: #60a5fa; }
+  .panel-status .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  .panel-jobs { margin-bottom: 16px; }
+  .panel-job {
+    padding: 6px 10px; margin-bottom: 4px;
+    border: 1px solid rgba(0,240,255,0.1);
+    background: rgba(0,240,255,0.03);
+    font-size: 10px;
+    color: rgba(200,200,255,0.6);
+    letter-spacing: 0.05em;
+    display: flex; justify-content: space-between;
+    align-items: center;
+  }
+  .job-status-pill {
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 2px;
+  }
+  .job-status-pill.done { background: rgba(0,255,136,0.15); color: #00ff88; }
+  .job-status-pill.busy { background: rgba(255,160,0,0.15); color: #ffa000; }
+  .job-status-pill.queued { background: rgba(0,240,255,0.15); color: #00f0ff; }
+
+  .panel-btns { display: flex; flex-direction: column; gap: 6px; }
+  .panel-btn {
+    padding: 8px 14px;
+    border: 1px solid;
+    background: transparent;
+    font-family: 'Courier New', monospace;
+    font-size: 10px; letter-spacing: 0.15em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+    clip-path: polygon(8px 0%, 100% 0%, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0% 100%, 0% 8px);
+  }
+  .panel-btn.primary {
+    border-color: rgba(255,42,109,0.5);
+    color: #ff2a6d;
+  }
+  .panel-btn.primary:hover {
+    background: rgba(255,42,109,0.1);
+    box-shadow: 0 0 12px rgba(255,42,109,0.3);
+    color: #ff6a96;
+  }
+  .panel-btn.secondary {
+    border-color: rgba(0,240,255,0.25);
+    color: rgba(0,240,255,0.5);
+  }
+  .panel-btn.secondary:hover {
+    background: rgba(0,240,255,0.05);
+    border-color: rgba(0,240,255,0.5);
+    color: #00f0ff;
+  }
+  .panel-close {
+    position: absolute; top: 14px; right: 14px;
+    background: none; border: none;
+    color: rgba(0,240,255,0.35);
+    font-size: 14px; cursor: pointer;
+    font-family: 'Courier New', monospace;
+    transition: color 0.2s;
+  }
+  .panel-close:hover { color: #00f0ff; }
+  .panel-divider {
+    border: none;
+    border-top: 1px solid rgba(0,240,255,0.08);
+    margin: 14px 0;
+  }
+
+  /* Scanline overlay */
+  #scanlines {
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.08) 2px,
+      rgba(0,0,0,0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 20;
+  }
+
+  /* Vignette */
+  #vignette {
+    position: fixed; inset: 0;
+    background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.75) 100%);
+    pointer-events: none;
+    z-index: 21;
+  }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="corner tl"></div>
+  <div class="corner tr"></div>
+  <div class="corner bl"></div>
+  <div class="corner br"></div>
+
+  <div id="topbar">
+    <div class="logo">◈ NEXUS</div>
+    <div class="sep">|</div>
+    <div>
+      <div class="label">LOCATION</div>
+      <div class="val">NIGHT OFFICE · SECTOR 7</div>
+    </div>
+    <div class="sep">|</div>
+    <div>
+      <div class="label">AGENTS ONLINE</div>
+      <div class="val" id="hud-online">4 / 5</div>
+    </div>
+    <div class="sep">|</div>
+    <div>
+      <div class="label">SYSTEM</div>
+      <div class="val" id="hud-time">--:--</div>
+    </div>
+  </div>
+
+  <div id="controls">
+    <span>WASD / ↑↓←→</span> — MOVE<br>
+    <span>E / CLICK</span> — INTERACT<br>
+    <span>ESC</span> — CLOSE PANEL
+  </div>
+
+  <div id="bottombar" id="bottombar">
+    ◈ NETRUNNER INTERFACE v2.077 &nbsp;|&nbsp; SONGBIRD PROTOCOL ACTIVE &nbsp;|&nbsp; ENCRYPTED
+  </div>
+
+  <!-- Interaction Panel -->
+  <div id="panel">
+    <button class="panel-close" onclick="closePanel()">✕</button>
+    <div id="panel-name">AGENT_NAME</div>
+    <div id="panel-group">GROUP · WORKSPACE</div>
+    <div class="panel-label">STATUS</div>
+    <div id="panel-status" class="panel-status idle">
+      <span class="dot"></span>
+      <span>IDLE</span>
+    </div>
+    <hr class="panel-divider">
+    <div class="panel-label">RECENT JOBS</div>
+    <div class="panel-jobs" id="panel-jobs"></div>
+    <div class="panel-btns">
+      <button class="panel-btn primary">⊕ NEW JOB →</button>
+      <button class="panel-btn secondary">VIEW ALL JOBS</button>
+      <button class="panel-btn secondary">SETTINGS</button>
+    </div>
+  </div>
+</div>
+
+<div id="scanlines"></div>
+<div id="vignette"></div>
+
+<script>
+// ════════════════════════════════════════════
+// SETUP
+// ════════════════════════════════════════════
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ════════════════════════════════════════════
+// PALETTE — Cyberpunk Songbird
+// ════════════════════════════════════════════
+const C = {
+  void:     '#03020a',
+  bg:       '#05030e',
+  surface:  '#0a0716',
+  cyan:     '#00f0ff',
+  magenta:  '#ff2a6d',
+  purple:   '#7b2fff',
+  yellow:   '#f5c518',
+  green:    '#00ff88',
+  orange:   '#ffa000',
+  blue:     '#60a5fa',
+  dim:      '#3a3a5a',
+  idle:     '#00ff88',
+  busy:     '#ffa000',
+  pending:  '#60a5fa',
+  offline:  '#3a3a5a',
+};
+
+// ════════════════════════════════════════════
+// ISOMETRIC CONFIG
+// ════════════════════════════════════════════
+const TW = 72, TH = 36; // tile width/height
+const TILE_H = 18;       // wall/box height in px
+
+// Camera origin (can be adjusted)
+let camX, camY;
+
+function toScreen(tx, ty) {
+  return {
+    x: camX + (tx - ty) * TW / 2,
+    y: camY + (tx + ty) * TH / 2,
+  };
+}
+
+// ════════════════════════════════════════════
+// MAP
+// ════════════════════════════════════════════
+// 0=void, 1=floor, 2=wall, 3=desk, 4=zone_backend, 5=zone_frontend, 6=zone_ib
+const MAP_W = 18, MAP_H = 14;
+const MAP = [
+  [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
+  [2,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,2],
+  [2,1,3,1,1,3,1,1,2,1,1,3,1,1,1,1,1,2],
+  [2,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,2],
+  [2,1,1,1,1,1,1,1,2,1,1,1,1,1,3,1,1,2],
+  [2,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,2],
+  [2,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,2],
+  [2,1,3,1,1,3,1,1,2,1,1,1,1,1,1,1,1,2],
+  [2,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,2],
+  [2,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,2],
+  [2,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,2],
+  [2,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,2],
+  [2,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,2],
+  [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
+];
+
+// Zone labels
+const ZONES = [
+  { tx:1, ty:1, label:'FI-BACKEND', color: C.cyan },
+  { tx:1, ty:7, label:'FI-FRONTEND', color: C.magenta },
+  { tx:9, ty:1, label:'IB-KHA', color: C.purple },
+];
+
+// ════════════════════════════════════════════
+// WORKERS (NPCs)
+// ════════════════════════════════════════════
+const WORKERS = [
+  { id:'w1', name:'fi-backend1',  group:'fi-backend',  status:'idle',         tx:2, ty:2, color:C.cyan   },
+  { id:'w2', name:'fi-backend2',  group:'fi-backend',  status:'busy',         tx:5, ty:2, color:C.cyan   },
+  { id:'w3', name:'fi-frontend1', group:'fi-frontend', status:'pending_user', tx:2, ty:7, color:C.magenta },
+  { id:'w4', name:'fi-frontend2', group:'fi-frontend', status:'offline',      tx:5, ty:7, color:C.magenta },
+  { id:'w5', name:'ib-kha',       group:'ib-kha',      status:'idle',         tx:11,ty:4, color:C.purple  },
+];
+
+const RECENT_JOBS = {
+  w1: [{title:'Refactor auth module',status:'done'},{title:'Fix JWT expiry',status:'done'},{title:'Add rate limit',status:'done'}],
+  w2: [{title:'API schema migration',status:'busy'},{title:'Unit tests for dispatcher',status:'done'},{title:'Swagger docs',status:'done'}],
+  w3: [{title:'Office map component',status:'queued'},{title:'NPC renderer fix',status:'done'},{title:'Top bar redesign',status:'done'}],
+  w4: [{title:'N/A — offline',status:'done'}],
+  w5: [{title:'Plan session UI',status:'done'},{title:'SSE streaming handler',status:'done'}],
+};
+
+function statusColor(s) {
+  return { idle:C.idle, busy:C.busy, pending_user:C.pending, offline:C.offline }[s] || C.offline;
+}
+
+// ════════════════════════════════════════════
+// PLAYER
+// ════════════════════════════════════════════
+const player = { tx:8.0, ty:10.0, facing:'up', moving:false };
+const keys = {};
+window.addEventListener('keydown', e => { keys[e.key] = true; if(e.key==='Escape') closePanel(); if(e.key==='e'||e.key==='E') tryInteract(); });
+window.addEventListener('keyup',   e => { keys[e.key] = false; });
+
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  WORKERS.forEach(w => {
+    const sp = toScreen(w.tx, w.ty);
+    const dx = mx - sp.x, dy = my - (sp.y - 24);
+    if (Math.sqrt(dx*dx+dy*dy) < 28) openPanel(w);
+  });
+});
+
+function movePlayer(dt) {
+  const spd = 5 * dt;
+  let dx=0, dy=0;
+  if (keys['ArrowLeft']  || keys['a'] || keys['A']) { dx-=spd; dy+=spd; }
+  if (keys['ArrowRight'] || keys['d'] || keys['D']) { dx+=spd; dy-=spd; }
+  if (keys['ArrowUp']    || keys['w'] || keys['W']) { dx-=spd; dy-=spd; }
+  if (keys['ArrowDown']  || keys['s'] || keys['S']) { dx+=spd; dy+=spd; }
+
+  player.moving = (dx!==0||dy!==0);
+
+  const nx = player.tx + dx;
+  const ny = player.ty + dy;
+  const ix = Math.round(nx), iy = Math.round(ny);
+  if (ix>=0&&ix<MAP_W&&iy>=0&&iy<MAP_H && MAP[iy][ix]!==2 && MAP[iy][ix]!==3) {
+    player.tx = nx; player.ty = ny;
+  }
+}
+
+// ════════════════════════════════════════════
+// PANEL
+// ════════════════════════════════════════════
+let panelOpen = false;
+let panelWorker = null;
+
+function openPanel(w) {
+  panelWorker = w;
+  document.getElementById('panel-name').textContent = w.name.toUpperCase();
+  document.getElementById('panel-group').textContent = w.group.toUpperCase() + ' · WORKSPACE';
+  const st = document.getElementById('panel-status');
+  st.className = 'panel-status ' + w.status;
+  st.innerHTML = `<span class="dot"></span><span>${w.status.replace('_',' ').toUpperCase()}</span>`;
+
+  const jobs = RECENT_JOBS[w.id] || [];
+  document.getElementById('panel-jobs').innerHTML = jobs.map(j => `
+    <div class="panel-job">
+      <span>${j.title}</span>
+      <span class="job-status-pill ${j.status}">${j.status}</span>
+    </div>
+  `).join('');
+
+  document.getElementById('panel').classList.add('open');
+  panelOpen = true;
+}
+
+function closePanel() {
+  document.getElementById('panel').classList.remove('open');
+  panelOpen = false;
+  panelWorker = null;
+}
+
+function tryInteract() {
+  if (panelOpen) { closePanel(); return; }
+  const near = nearestWorker();
+  if (near && near.dist < 2.5) openPanel(near.worker);
+}
+
+function nearestWorker() {
+  let best = null, bestD = Infinity;
+  WORKERS.forEach(w => {
+    const dx = player.tx - w.tx, dy = player.ty - w.ty;
+    const d = Math.sqrt(dx*dx+dy*dy);
+    if (d < bestD) { bestD=d; best={worker:w, dist:d}; }
+  });
+  return best;
+}
+
+// ════════════════════════════════════════════
+// PARTICLES
+// ════════════════════════════════════════════
+const particles = [];
+for (let i=0; i<60; i++) {
+  particles.push({
+    x: Math.random()*1600-800,
+    y: Math.random()*900-450,
+    vx: (Math.random()-0.5)*0.3,
+    vy: -Math.random()*0.5-0.1,
+    alpha: Math.random(),
+    size: Math.random()*1.5+0.5,
+    color: Math.random() < 0.5 ? C.cyan : C.magenta,
+    life: Math.random(),
+  });
+}
+
+function updateParticles(dt) {
+  particles.forEach(p => {
+    p.x += p.vx; p.y += p.vy;
+    p.life += dt * 0.3;
+    p.alpha = Math.sin(p.life) * 0.6;
+    if (p.y < -500) { p.y = 500; p.x = Math.random()*1600-800; p.life = 0; }
+  });
+}
+
+// ════════════════════════════════════════════
+// DRAWING HELPERS
+// ════════════════════════════════════════════
+function isoTile(x, y, topColor, rightColor, leftColor, h) {
+  const hw = TW/2, hh = TH/2;
+  h = h||0;
+  // Top face
+  ctx.beginPath();
+  ctx.moveTo(x, y-h);
+  ctx.lineTo(x+hw, y+hh-h);
+  ctx.lineTo(x, y+TH-h);
+  ctx.lineTo(x-hw, y+hh-h);
+  ctx.closePath();
+  ctx.fillStyle = topColor; ctx.fill();
+
+  if (h > 0) {
+    // Right face
+    ctx.beginPath();
+    ctx.moveTo(x+hw, y+hh-h);
+    ctx.lineTo(x+hw, y+hh);
+    ctx.lineTo(x, y+TH);
+    ctx.lineTo(x, y+TH-h);
+    ctx.closePath();
+    ctx.fillStyle = rightColor; ctx.fill();
+    // Left face
+    ctx.beginPath();
+    ctx.moveTo(x-hw, y+hh-h);
+    ctx.lineTo(x-hw, y+hh);
+    ctx.lineTo(x, y+TH);
+    ctx.lineTo(x, y+TH-h);
+    ctx.closePath();
+    ctx.fillStyle = leftColor; ctx.fill();
+  }
+}
+
+function neonLine(x1,y1,x2,y2,color,alpha,blur) {
+  ctx.save();
+  ctx.globalAlpha = alpha||0.6;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = blur||8;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  ctx.restore();
+}
+
+function neonGlow(x, y, r, color, alpha) {
+  const g = ctx.createRadialGradient(x,y,0,x,y,r);
+  g.addColorStop(0, color + Math.floor((alpha||0.3)*255).toString(16).padStart(2,'0'));
+  g.addColorStop(1, 'transparent');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+}
+
+// ════════════════════════════════════════════
+// RENDER SCENE
+// ════════════════════════════════════════════
+let t = 0;
+
+function renderScene() {
+  const W = canvas.width, H = canvas.height;
+  camX = W/2 - (player.tx - player.ty) * TW/2;
+  camY = H/2 - (player.tx + player.ty) * TH/2 + 60;
+
+  // Background
+  ctx.fillStyle = C.void;
+  ctx.fillRect(0,0,W,H);
+
+  // Background grid (very subtle)
+  ctx.save();
+  ctx.strokeStyle = 'rgba(0,240,255,0.03)';
+  ctx.lineWidth = 1;
+  for(let gx=0;gx<W;gx+=40){ctx.beginPath();ctx.moveTo(gx,0);ctx.lineTo(gx,H);ctx.stroke();}
+  for(let gy=0;gy<H;gy+=40){ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(W,gy);ctx.stroke();}
+  ctx.restore();
+
+  // Draw ambient particles
+  particles.forEach(p => {
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, p.alpha);
+    ctx.shadowColor = p.color;
+    ctx.shadowBlur = 6;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x + camX*0.05, p.y + camY*0.05, p.size, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  });
+
+  // ── Sort render order (painter's algo) ──
+  const renderList = [];
+  for (let ry=0; ry<MAP_H; ry++) {
+    for (let rx=0; rx<MAP_W; rx++) {
+      const tile = MAP[ry][rx];
+      if (tile === 0) continue;
+      renderList.push({rx,ry,tile,depth:rx+ry});
+    }
+  }
+  // Add workers to render list
+  WORKERS.forEach(w => renderList.push({type:'npc', w, depth: w.tx+w.ty+0.5}));
+  // Add player
+  renderList.push({type:'player', depth: player.tx+player.ty+0.5});
+  renderList.sort((a,b)=>a.depth-b.depth);
+
+  // ── Zone labels ──
+  ZONES.forEach(z => {
+    const sp = toScreen(z.tx, z.ty);
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    ctx.shadowColor = z.color;
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = z.color;
+    ctx.font = '700 9px "Courier New"';
+    ctx.letterSpacing = '0.15em';
+    ctx.fillText('[ ' + z.label + ' ]', sp.x - 30, sp.y - 10);
+    ctx.restore();
+  });
+
+  renderList.forEach(item => {
+    if (item.type === 'npc') { drawNPC(item.w); return; }
+    if (item.type === 'player') { drawPlayer(); return; }
+
+    const {rx,ry,tile} = item;
+    const sp = toScreen(rx, ry);
+    const x = sp.x, y = sp.y;
+
+    if (tile === 2) {
+      // WALL
+      ctx.save();
+      isoTile(x, y,
+        '#110e22',
+        '#0c0a1a',
+        '#0e0c1e',
+        TILE_H * 1.5
+      );
+      // Neon edge top
+      ctx.globalAlpha = 0.3;
+      ctx.shadowColor = C.cyan;
+      ctx.shadowBlur = 6;
+      ctx.strokeStyle = C.cyan;
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(x, y-TILE_H*1.5);
+      ctx.lineTo(x+TW/2, y+TH/2-TILE_H*1.5);
+      ctx.lineTo(x, y+TH-TILE_H*1.5);
+      ctx.lineTo(x-TW/2, y+TH/2-TILE_H*1.5);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+    } else if (tile === 1 || tile >= 4) {
+      // FLOOR
+      const even = (rx+ry)%2===0;
+      const floorTop = even ? '#080614' : '#09071a';
+      ctx.save();
+      isoTile(x, y, floorTop, null, null, 0);
+      // Floor grid lines
+      ctx.globalAlpha = 0.12;
+      ctx.strokeStyle = C.cyan;
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x+TW/2, y+TH/2);
+      ctx.lineTo(x, y+TH);
+      ctx.lineTo(x-TW/2, y+TH/2);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+    } else if (tile === 3) {
+      // DESK
+      drawDesk(x, y, rx, ry);
+    }
+  });
+}
+
+function drawDesk(x, y, rx, ry) {
+  // Find worker at this desk
+  const w = WORKERS.find(w => w.tx===rx && w.ty===ry);
+  const sc = w ? statusColor(w.status) : C.dim;
+  const pulse = Math.sin(t*2) * 0.5 + 0.5;
+  const dh = 14;
+
+  ctx.save();
+
+  // Desk base glow
+  if (w && w.status !== 'offline') {
+    neonGlow(x, y+TH/2, 55, sc, 0.07 + pulse*0.04);
+  }
+
+  // Desk body (isometric box)
+  // Top
+  ctx.beginPath();
+  ctx.moveTo(x, y-dh);
+  ctx.lineTo(x+TW/2, y+TH/2-dh);
+  ctx.lineTo(x, y+TH-dh);
+  ctx.lineTo(x-TW/2, y+TH/2-dh);
+  ctx.closePath();
+  ctx.fillStyle = '#0f0b1f';
+  ctx.fill();
+  ctx.shadowColor = sc; ctx.shadowBlur = 4;
+  ctx.strokeStyle = sc + '66'; ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Right face
+  ctx.beginPath();
+  ctx.moveTo(x+TW/2, y+TH/2-dh);
+  ctx.lineTo(x+TW/2, y+TH/2);
+  ctx.lineTo(x, y+TH);
+  ctx.lineTo(x, y+TH-dh);
+  ctx.closePath();
+  ctx.fillStyle = '#08061a'; ctx.fill();
+  ctx.strokeStyle = sc+'33'; ctx.stroke();
+
+  // Left face
+  ctx.beginPath();
+  ctx.moveTo(x-TW/2, y+TH/2-dh);
+  ctx.lineTo(x-TW/2, y+TH/2);
+  ctx.lineTo(x, y+TH);
+  ctx.lineTo(x, y+TH-dh);
+  ctx.closePath();
+  ctx.fillStyle = '#0a0820'; ctx.fill();
+  ctx.strokeStyle = sc+'33'; ctx.stroke();
+
+  // Monitor on desk (angled)
+  if (w && w.status !== 'offline') {
+    const mx = x+8, my = y-dh-18;
+    const flicker = w.status==='busy' ? 0.7+Math.sin(t*7)*0.3 : 0.9+Math.sin(t*0.5)*0.1;
+    ctx.globalAlpha = flicker;
+    ctx.shadowColor = sc; ctx.shadowBlur = 10;
+    ctx.fillStyle = sc + '40';
+    ctx.fillRect(mx-10, my, 20, 12);
+    ctx.fillStyle = sc + '80';
+    ctx.fillRect(mx-8, my+2, 16, 8);
+    ctx.globalAlpha = 1;
+
+    // Scanline on monitor
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = '#000';
+    for(let sl=my+2; sl<my+10; sl+=2) ctx.fillRect(mx-8, sl, 16, 1);
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.restore();
+}
+
+function drawNPC(w) {
+  const sp = toScreen(w.tx, w.ty);
+  const x = sp.x, y = sp.y - 32;
+  const sc = statusColor(w.status);
+  const pulse = Math.sin(t*2+w.tx) * 0.5 + 0.5;
+
+  ctx.save();
+
+  // Status aura
+  if (w.status !== 'offline') {
+    neonGlow(x, y+4, 22, sc, 0.15 + pulse*0.08);
+  }
+
+  // Pulsing status ring
+  if (w.status !== 'offline') {
+    ctx.globalAlpha = 0.3 + pulse*0.3;
+    ctx.shadowColor = sc; ctx.shadowBlur = 8;
+    ctx.strokeStyle = sc;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(x, y+4, 16+pulse*3, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // Body
+  ctx.shadowColor = sc; ctx.shadowBlur = 6;
+  ctx.fillStyle = w.status==='offline' ? '#1a1a2a' : (w.color + 'dd');
+  ctx.fillRect(x-5, y-2, 10, 14);
+
+  // Head
+  ctx.shadowBlur = 4;
+  ctx.fillStyle = '#d4c5f9';
+  ctx.beginPath(); ctx.arc(x, y-8, 7, 0, Math.PI*2); ctx.fill();
+
+  // Cyberware line (Songbird detail)
+  if (w.status !== 'offline') {
+    ctx.globalAlpha = 0.7;
+    ctx.strokeStyle = sc; ctx.lineWidth = 1;
+    ctx.shadowBlur = 4;
+    ctx.beginPath(); ctx.moveTo(x+3,y-4); ctx.lineTo(x+3,y+4); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // Status dot
+  ctx.fillStyle = sc;
+  ctx.shadowBlur = 8;
+  ctx.beginPath(); ctx.arc(x+9, y-12, 3.5, 0, Math.PI*2); ctx.fill();
+
+  // Name badge
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 0.85;
+  ctx.fillStyle = 'rgba(3,2,10,0.85)';
+  const nw = w.name.length * 5.5 + 12;
+  ctx.fillRect(x - nw/2, y-28, nw, 14);
+  ctx.strokeStyle = sc + '55'; ctx.lineWidth = 0.5;
+  ctx.strokeRect(x - nw/2, y-28, nw, 14);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = sc;
+  ctx.shadowColor = sc; ctx.shadowBlur = 6;
+  ctx.font = '700 8px "Courier New"';
+  ctx.textAlign = 'center';
+  ctx.fillText(w.name.toUpperCase(), x, y-18);
+
+  // Proximity indicator
+  const near = nearestWorker();
+  if (near && near.worker.id === w.id && near.dist < 2.5) {
+    const blink = Math.floor(t*3)%2===0;
+    if (blink) {
+      ctx.fillStyle = C.yellow;
+      ctx.shadowColor = C.yellow; ctx.shadowBlur = 10;
+      ctx.font = '700 9px "Courier New"';
+      ctx.fillText('[ E ] INTERACT', x, y-38);
+    }
+  }
+
+  ctx.textAlign = 'left';
+  ctx.restore();
+}
+
+function drawPlayer() {
+  const sp = toScreen(player.tx, player.ty);
+  const x = sp.x, y = sp.y - 28;
+  const bob = Math.sin(t * 6) * (player.moving ? 2 : 0.5);
+  const pulse = Math.sin(t*3) * 0.5 + 0.5;
+
+  ctx.save();
+
+  // Ground shadow
+  ctx.globalAlpha = 0.3;
+  neonGlow(x, y+20+bob, 20, C.cyan, 0.2);
+  ctx.globalAlpha = 1;
+
+  // Player glow
+  neonGlow(x, y+bob, 28, C.cyan, 0.1 + pulse*0.05);
+
+  // Orbit ring
+  ctx.globalAlpha = 0.4+pulse*0.2;
+  ctx.shadowColor = C.cyan; ctx.shadowBlur = 10;
+  ctx.strokeStyle = C.cyan;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(x, y+4+bob, 18, 0, Math.PI*2);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Body (Songbird color — dark purple jacket)
+  ctx.shadowColor = C.cyan; ctx.shadowBlur = 8;
+  ctx.fillStyle = '#3a0e6e';
+  ctx.fillRect(x-5, y-2+bob, 10, 14);
+
+  // Accent stripe
+  ctx.fillStyle = C.cyan + 'cc';
+  ctx.fillRect(x+2, y-2+bob, 2, 14);
+
+  // Head
+  ctx.fillStyle = '#f0e6ff';
+  ctx.beginPath(); ctx.arc(x, y-8+bob, 7, 0, Math.PI*2); ctx.fill();
+
+  // Songbird cyberware detail (spine line)
+  ctx.strokeStyle = C.magenta; ctx.lineWidth = 1.5;
+  ctx.shadowColor = C.magenta; ctx.shadowBlur = 6;
+  ctx.globalAlpha = 0.8;
+  ctx.beginPath(); ctx.moveTo(x, y-1+bob); ctx.lineTo(x, y+12+bob); ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Label
+  ctx.shadowBlur = 8; ctx.shadowColor = C.cyan;
+  ctx.fillStyle = C.cyan;
+  ctx.font = '700 9px "Courier New"';
+  ctx.textAlign = 'center';
+  ctx.fillText('YOU', x, y-20+bob);
+  ctx.textAlign = 'left';
+
+  ctx.restore();
+}
+
+// ════════════════════════════════════════════
+// SCAN BEAM (moving horizontal light)
+// ════════════════════════════════════════════
+function drawScanBeam() {
+  const W = canvas.width, H = canvas.height;
+  const sy = ((t * 60) % (H + 80)) - 40;
+  const g = ctx.createLinearGradient(0, sy-30, 0, sy+30);
+  g.addColorStop(0, 'transparent');
+  g.addColorStop(0.5, 'rgba(0,240,255,0.025)');
+  g.addColorStop(1, 'transparent');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, sy-30, W, 60);
+}
+
+// ════════════════════════════════════════════
+// HUD UPDATE
+// ════════════════════════════════════════════
+function updateHUD() {
+  const now = new Date();
+  document.getElementById('hud-time').textContent =
+    now.getHours().toString().padStart(2,'0') + ':' +
+    now.getMinutes().toString().padStart(2,'0') + ':' +
+    now.getSeconds().toString().padStart(2,'0');
+  const online = WORKERS.filter(w=>w.status!=='offline').length;
+  document.getElementById('hud-online').textContent = `${online} / ${WORKERS.length}`;
+}
+
+// ════════════════════════════════════════════
+// LOOP
+// ════════════════════════════════════════════
+let last = 0;
+function loop(ts) {
+  const dt = Math.min((ts - last) / 1000, 0.05);
+  last = ts;
+  t += dt;
+
+  movePlayer(dt);
+  updateParticles(dt);
+  renderScene();
+  drawScanBeam();
+
+  if (Math.floor(t)!==Math.floor(t-dt)) updateHUD();
+
+  requestAnimationFrame(loop);
+}
+
+updateHUD();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

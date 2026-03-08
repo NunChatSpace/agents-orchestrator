@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXUS — Agent Persona Reference</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@300;400;500;600&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: #03020a;
+    color: #e2e8f0;
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  body::before {
+    content:'';
+    position:fixed; inset:0;
+    background-image:
+      linear-gradient(rgba(0,240,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,240,255,0.02) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events:none;
+  }
+
+  .wrap { position:relative; max-width:960px; margin:0 auto; padding:48px 24px; }
+
+  header { text-align:center; margin-bottom:48px; }
+  header h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 22px; font-weight:700; letter-spacing:0.2em;
+    color:#00f0ff;
+    text-shadow: 0 0 20px rgba(0,240,255,0.5);
+    margin-bottom:6px;
+  }
+  header p { font-size:12px; letter-spacing:0.1em; color:rgba(0,240,255,0.35); text-transform:uppercase; }
+
+  /* Settings mockup */
+  .settings-section {
+    background: rgba(10,7,22,0.9);
+    border: 1px solid rgba(0,240,255,0.15);
+    padding: 28px 32px;
+    margin-bottom: 32px;
+    clip-path: polygon(16px 0%, 100% 0%, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0% 100%, 0% 16px);
+  }
+  .section-label {
+    font-size:10px; letter-spacing:0.2em; text-transform:uppercase;
+    color:rgba(0,240,255,0.4);
+    margin-bottom:20px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .section-label::after { content:''; flex:1; height:1px; background:rgba(0,240,255,0.08); }
+
+  /* Persona grid */
+  .persona-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+  }
+
+  .persona-card {
+    border: 1px solid rgba(0,240,255,0.12);
+    background: rgba(0,0,0,0.4);
+    padding: 16px 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    clip-path: polygon(8px 0%, 100% 0%, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0% 100%, 0% 8px);
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+    position: relative;
+  }
+  .persona-card:hover {
+    border-color: rgba(0,240,255,0.3);
+    background: rgba(0,240,255,0.04);
+  }
+  .persona-card.selected {
+    border-color: rgba(0,240,255,0.7);
+    background: rgba(0,240,255,0.07);
+    box-shadow: 0 0 16px rgba(0,240,255,0.15), inset 0 0 16px rgba(0,240,255,0.03);
+  }
+  .persona-card.selected::after {
+    content: '✓';
+    position:absolute; top:6px; right:8px;
+    font-size:10px; color:#00f0ff;
+    text-shadow: 0 0 8px #00f0ff;
+  }
+  .persona-card canvas { display:block; }
+  .persona-name {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size:11px; font-weight:700; letter-spacing:0.1em;
+    text-transform:uppercase;
+    text-align:center;
+  }
+  .persona-desc {
+    font-size:9px; color:rgba(200,200,255,0.4);
+    text-align:center; line-height:1.4;
+    letter-spacing:0.03em;
+  }
+
+  /* Showcase row */
+  .showcase {
+    display:grid;
+    grid-template-columns: repeat(5,1fr);
+    gap:16px;
+    margin-bottom:32px;
+  }
+  .showcase-item {
+    display:flex; flex-direction:column; align-items:center; gap:12px;
+  }
+  .showcase-canvas-wrap {
+    position:relative;
+    width:120px; height:160px;
+    display:flex; align-items:center; justify-content:center;
+    background: rgba(10,7,22,0.8);
+    border: 1px solid rgba(255,255,255,0.06);
+    clip-path: polygon(12px 0%, 100% 0%, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0% 100%, 0% 12px);
+  }
+  .showcase-label {
+    font-family:'Space Grotesk',sans-serif;
+    font-size:12px; font-weight:700; letter-spacing:0.12em;
+    text-transform:uppercase;
+    text-align:center;
+  }
+  .showcase-sub {
+    font-size:10px; color:rgba(200,200,255,0.35);
+    text-align:center;
+  }
+
+  /* In-office preview */
+  .office-preview { margin-bottom:32px; }
+  .office-preview canvas {
+    border:1px solid rgba(0,240,255,0.12);
+    width:100%;
+    display:block;
+  }
+  .preview-label {
+    font-size:10px; letter-spacing:0.15em; text-transform:uppercase;
+    color:rgba(0,240,255,0.3);
+    margin-bottom:10px;
+  }
+
+  /* Scanlines */
+  #scanlines {
+    position:fixed; inset:0;
+    background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.06) 2px,rgba(0,0,0,0.06) 4px);
+    pointer-events:none; z-index:50;
+  }
+  #vignette {
+    position:fixed; inset:0;
+    background: radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,0.65) 100%);
+    pointer-events:none; z-index:51;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>◈ NEXUS — AGENT PERSONA SYSTEM</h1>
+    <p>Cyberpunk character archetypes · assignable per agent</p>
+  </header>
+
+  <!-- Large showcase -->
+  <div class="preview-label">Persona showcase — full size sprites</div>
+  <div class="showcase" id="showcase"></div>
+
+  <!-- Settings mockup -->
+  <div class="settings-section">
+    <div class="section-label">Agent Settings · Persona</div>
+    <div class="persona-grid" id="persona-grid"></div>
+  </div>
+
+  <!-- Office map preview -->
+  <div class="preview-label">In-office map preview — all personas together</div>
+  <div class="office-preview">
+    <canvas id="office-canvas" width="900" height="320"></canvas>
+  </div>
+</div>
+<div id="scanlines"></div>
+<div id="vignette"></div>
+
+<script>
+// ════════════════════════════════════════════
+// PERSONAS
+// ════════════════════════════════════════════
+const PERSONAS = [
+  {
+    id: 'netrunner',
+    name: 'Netrunner',
+    desc: 'Data specialist\nSleek cyberware',
+    color: '#00f0ff',
+    bg: 'rgba(0,240,255,0.08)',
+  },
+  {
+    id: 'tech',
+    name: 'Tech',
+    desc: 'Engineer\nMechanical augments',
+    color: '#f59e0b',
+    bg: 'rgba(245,158,11,0.08)',
+  },
+  {
+    id: 'fixer',
+    name: 'Fixer',
+    desc: 'Operator\nMinimal cyberware',
+    color: '#eab308',
+    bg: 'rgba(234,179,8,0.08)',
+  },
+  {
+    id: 'solo',
+    name: 'Solo',
+    desc: 'Combat specialist\nHeavy armor',
+    color: '#ef4444',
+    bg: 'rgba(239,68,68,0.08)',
+  },
+  {
+    id: 'nomad',
+    name: 'Nomad',
+    desc: 'Wanderer\nRugged build',
+    color: '#f97316',
+    bg: 'rgba(249,115,22,0.08)',
+  },
+];
+
+const STATUS_WORKERS = ['idle','busy','pending_user','offline'];
+
+// ════════════════════════════════════════════
+// SPRITE DRAW FUNCTIONS (per persona)
+// Each: (ctx, cx, cy, scale, statusColor, pulse, animated)
+// ════════════════════════════════════════════
+
+function drawGlow(ctx, cx, cy, r, color, alpha) {
+  const g = ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+  g.addColorStop(0, color + Math.round(alpha*255).toString(16).padStart(2,'0'));
+  g.addColorStop(1,'transparent');
+  ctx.fillStyle = g;
+  ctx.fillRect(cx-r, cy-r, r*2, r*2);
+}
+
+function drawNetrunner(ctx, cx, cy, s, sc, pulse) {
+  // Aura
+  drawGlow(ctx, cx, cy+4*s, 28*s, sc, 0.12+pulse*0.06);
+  // Hood shadow
+  ctx.fillStyle = '#080415';
+  ctx.beginPath(); ctx.ellipse(cx, cy-14*s, 9*s, 5*s, 0, 0, Math.PI*2); ctx.fill();
+  // Hooded head
+  ctx.shadowColor = sc; ctx.shadowBlur = 8*s;
+  ctx.fillStyle = '#1a0e2e';
+  ctx.beginPath(); ctx.arc(cx, cy-12*s, 8*s, 0, Math.PI*2); ctx.fill();
+  // Face
+  ctx.fillStyle = '#d4c5f9';
+  ctx.beginPath(); ctx.arc(cx, cy-12*s, 5.5*s, 0, Math.PI*2); ctx.fill();
+  // Cyber eye (cyan line)
+  ctx.strokeStyle = sc; ctx.lineWidth = 1.5*s;
+  ctx.shadowBlur = 6*s;
+  ctx.beginPath(); ctx.moveTo(cx-3*s, cy-13*s); ctx.lineTo(cx+3*s, cy-13*s); ctx.stroke();
+  // Slim body / cloak
+  ctx.fillStyle = '#120a24';
+  ctx.beginPath();
+  ctx.moveTo(cx-5*s, cy-4*s);
+  ctx.lineTo(cx-7*s, cy+14*s);
+  ctx.lineTo(cx+7*s, cy+14*s);
+  ctx.lineTo(cx+5*s, cy-4*s);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = sc+'44'; ctx.lineWidth = 0.5*s; ctx.shadowBlur=0;
+  ctx.stroke();
+  // Spine cyberware (Songbird signature)
+  ctx.shadowColor = sc; ctx.shadowBlur = 8*s;
+  ctx.strokeStyle = sc; ctx.lineWidth = 1.5*s;
+  ctx.beginPath(); ctx.moveTo(cx, cy-3*s); ctx.lineTo(cx, cy+12*s); ctx.stroke();
+  // Wrist data stream dots
+  ctx.fillStyle = sc;
+  for(let i=0;i<3;i++){
+    ctx.globalAlpha = 0.4+pulse*0.4*(i/3);
+    ctx.beginPath(); ctx.arc(cx-8*s+i*2*s, cy+(2+i*3)*s, 1*s, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  // Status dot
+  ctx.shadowBlur = 8*s;
+  ctx.fillStyle = sc;
+  ctx.beginPath(); ctx.arc(cx+9*s, cy-18*s, 3*s, 0, Math.PI*2); ctx.fill();
+}
+
+function drawTech(ctx, cx, cy, s, sc, pulse) {
+  drawGlow(ctx, cx, cy+4*s, 28*s, sc, 0.1+pulse*0.05);
+  // Stocky head with visor
+  ctx.shadowColor = sc; ctx.shadowBlur = 6*s;
+  ctx.fillStyle = '#1a1008';
+  ctx.beginPath(); ctx.arc(cx, cy-12*s, 7.5*s, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#d4b896';
+  ctx.beginPath(); ctx.arc(cx, cy-12*s, 5*s, 0, Math.PI*2); ctx.fill();
+  // Visor bar (amber)
+  ctx.fillStyle = sc+'cc';
+  ctx.shadowBlur = 10*s;
+  ctx.fillRect(cx-5*s, cy-14*s, 10*s, 3*s);
+  // Stocky body
+  ctx.shadowBlur = 3*s;
+  ctx.fillStyle = '#1c1006';
+  ctx.fillRect(cx-7*s, cy-4*s, 14*s, 18*s);
+  ctx.strokeStyle = sc+'33'; ctx.lineWidth = 0.5*s; ctx.shadowBlur=0;
+  ctx.strokeRect(cx-7*s, cy-4*s, 14*s, 18*s);
+  // Mechanical shoulder mount (right)
+  ctx.fillStyle = '#2a1a04';
+  ctx.shadowColor = sc; ctx.shadowBlur = 6*s;
+  ctx.fillRect(cx+5*s, cy-6*s, 6*s, 8*s);
+  ctx.strokeStyle = sc+'66'; ctx.lineWidth = 1*s;
+  ctx.strokeRect(cx+5*s, cy-6*s, 6*s, 8*s);
+  // Tool detail (wrench)
+  ctx.strokeStyle = sc; ctx.lineWidth = 2*s; ctx.shadowBlur = 5*s;
+  ctx.beginPath(); ctx.moveTo(cx+8*s, cy+4*s); ctx.lineTo(cx+8*s, cy+12*s); ctx.stroke();
+  // Status dot
+  ctx.fillStyle = sc; ctx.shadowBlur = 8*s;
+  ctx.beginPath(); ctx.arc(cx+9*s, cy-18*s, 3*s, 0, Math.PI*2); ctx.fill();
+}
+
+function drawFixer(ctx, cx, cy, s, sc, pulse) {
+  drawGlow(ctx, cx, cy+4*s, 26*s, sc, 0.08+pulse*0.04);
+  // Taller head
+  ctx.shadowColor = sc; ctx.shadowBlur = 4*s;
+  ctx.fillStyle = '#1e1508';
+  ctx.beginPath(); ctx.arc(cx, cy-14*s, 7*s, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#c8a87a';
+  ctx.beginPath(); ctx.arc(cx, cy-14*s, 5*s, 0, Math.PI*2); ctx.fill();
+  // Long coat body
+  ctx.fillStyle = '#100e06';
+  ctx.beginPath();
+  ctx.moveTo(cx-5*s, cy-5*s);
+  ctx.lineTo(cx-8*s, cy+18*s);
+  ctx.lineTo(cx+8*s, cy+18*s);
+  ctx.lineTo(cx+5*s, cy-5*s);
+  ctx.closePath();
+  ctx.fill();
+  // Gold lapel/collar
+  ctx.strokeStyle = sc+'88'; ctx.lineWidth = 1.5*s;
+  ctx.shadowColor = sc; ctx.shadowBlur = 8*s;
+  ctx.beginPath(); ctx.moveTo(cx-2*s, cy-5*s); ctx.lineTo(cx, cy+4*s); ctx.lineTo(cx+2*s, cy-5*s); ctx.stroke();
+  // Cigarette ember
+  ctx.fillStyle = '#ff6a00';
+  ctx.shadowColor = '#ff6a00'; ctx.shadowBlur = 10*s;
+  ctx.beginPath(); ctx.arc(cx+7*s, cy-12*s, 2*s, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(cx+5*s, cy-13*s, 4*s, 1.5*s);
+  // Status dot
+  ctx.fillStyle = sc; ctx.shadowBlur = 8*s;
+  ctx.beginPath(); ctx.arc(cx+9*s, cy-20*s, 3*s, 0, Math.PI*2); ctx.fill();
+}
+
+function drawSolo(ctx, cx, cy, s, sc, pulse) {
+  drawGlow(ctx, cx, cy+4*s, 30*s, sc, 0.1+pulse*0.06);
+  // Broad armored head
+  ctx.shadowColor = sc; ctx.shadowBlur = 6*s;
+  ctx.fillStyle = '#1a0808';
+  ctx.beginPath(); ctx.arc(cx, cy-12*s, 8.5*s, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#c09090';
+  ctx.beginPath(); ctx.arc(cx, cy-12*s, 6*s, 0, Math.PI*2); ctx.fill();
+  // Red visor (full width)
+  ctx.fillStyle = sc+'dd';
+  ctx.shadowBlur = 14*s;
+  ctx.fillRect(cx-6*s, cy-15*s, 12*s, 4*s);
+  // Armored body (wide)
+  ctx.shadowBlur = 4*s;
+  ctx.fillStyle = '#1a0808';
+  ctx.fillRect(cx-9*s, cy-4*s, 18*s, 18*s);
+  // Chest plate
+  ctx.fillStyle = '#280e0e';
+  ctx.shadowColor = sc; ctx.shadowBlur = 6*s;
+  ctx.fillRect(cx-7*s, cy-3*s, 14*s, 10*s);
+  ctx.strokeStyle = sc+'55'; ctx.lineWidth = 0.5*s; ctx.shadowBlur=0;
+  ctx.strokeRect(cx-7*s, cy-3*s, 14*s, 10*s);
+  // Shoulder pads
+  ctx.fillStyle = '#1a0808';
+  ctx.shadowColor = sc; ctx.shadowBlur = 4*s;
+  ctx.fillRect(cx-12*s, cy-5*s, 5*s, 8*s);
+  ctx.fillRect(cx+7*s, cy-5*s, 5*s, 8*s);
+  // Status dot
+  ctx.fillStyle = sc; ctx.shadowBlur = 8*s;
+  ctx.beginPath(); ctx.arc(cx+11*s, cy-19*s, 3*s, 0, Math.PI*2); ctx.fill();
+}
+
+function drawNomad(ctx, cx, cy, s, sc, pulse) {
+  drawGlow(ctx, cx, cy+4*s, 26*s, sc, 0.08+pulse*0.04);
+  // Head — rugged
+  ctx.shadowColor = sc; ctx.shadowBlur = 4*s;
+  ctx.fillStyle = '#1a0e06';
+  ctx.beginPath(); ctx.arc(cx, cy-12*s, 7*s, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#b8966a';
+  ctx.beginPath(); ctx.arc(cx, cy-12*s, 5*s, 0, Math.PI*2); ctx.fill();
+  // Layered jacket (slightly asymmetric)
+  ctx.fillStyle = '#1e1008';
+  ctx.fillRect(cx-6*s, cy-4*s, 12*s, 16*s);
+  // Layer 2 (shirt visible)
+  ctx.fillStyle = '#2a180a';
+  ctx.fillRect(cx-3*s, cy-4*s, 6*s, 16*s);
+  // Orange scarf
+  ctx.strokeStyle = sc; ctx.lineWidth = 2.5*s;
+  ctx.shadowColor = sc; ctx.shadowBlur = 8*s;
+  ctx.beginPath();
+  ctx.moveTo(cx-4*s, cy-6*s);
+  ctx.quadraticCurveTo(cx, cy-3*s, cx+4*s, cy-1*s);
+  ctx.stroke();
+  // Worn texture (darker patches)
+  ctx.globalAlpha = 0.3;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(cx-6*s, cy+6*s, 3*s, 4*s);
+  ctx.fillRect(cx+2*s, cy+10*s, 4*s, 4*s);
+  ctx.globalAlpha = 1;
+  // Status dot
+  ctx.fillStyle = sc; ctx.shadowBlur = 8*s;
+  ctx.beginPath(); ctx.arc(cx+9*s, cy-18*s, 3*s, 0, Math.PI*2); ctx.fill();
+}
+
+const RENDERERS = { netrunner:drawNetrunner, tech:drawTech, fixer:drawFixer, solo:drawSolo, nomad:drawNomad };
+
+function statusColor(s) {
+  return { idle:'#00ff88', busy:'#ffa000', pending_user:'#60a5fa', offline:'#3a3a5a' }[s] || '#3a3a5a';
+}
+
+// ════════════════════════════════════════════
+// BUILD SHOWCASE (large sprites)
+// ════════════════════════════════════════════
+const showcaseEl = document.getElementById('showcase');
+PERSONAS.forEach(p => {
+  const item = document.createElement('div');
+  item.className = 'showcase-item';
+
+  const wrap = document.createElement('div');
+  wrap.className = 'showcase-canvas-wrap';
+  wrap.style.borderColor = p.color + '33';
+
+  const c = document.createElement('canvas');
+  c.width = 120; c.height = 160;
+  wrap.appendChild(c);
+
+  const name = document.createElement('div');
+  name.className = 'showcase-label';
+  name.style.color = p.color;
+  name.style.textShadow = `0 0 10px ${p.color}`;
+  name.textContent = p.name;
+
+  const sub = document.createElement('div');
+  sub.className = 'showcase-sub';
+  sub.textContent = p.desc;
+
+  item.appendChild(wrap);
+  item.appendChild(name);
+  item.appendChild(sub);
+  showcaseEl.appendChild(item);
+  p._showcaseCanvas = c;
+});
+
+// ════════════════════════════════════════════
+// BUILD SETTINGS PERSONA GRID
+// ════════════════════════════════════════════
+const gridEl = document.getElementById('persona-grid');
+let selectedPersona = 'netrunner';
+
+PERSONAS.forEach(p => {
+  const card = document.createElement('div');
+  card.className = 'persona-card' + (p.id===selectedPersona ? ' selected' : '');
+  card.id = 'card-' + p.id;
+  card.style.setProperty('--pc', p.color);
+
+  const c = document.createElement('canvas');
+  c.width = 60; c.height = 80;
+  p._settingsCanvas = c;
+
+  const name = document.createElement('div');
+  name.className = 'persona-name';
+  name.style.color = p.color;
+  name.textContent = p.name;
+
+  const desc = document.createElement('div');
+  desc.className = 'persona-desc';
+  desc.textContent = p.desc;
+
+  card.appendChild(c);
+  card.appendChild(name);
+  card.appendChild(desc);
+  card.addEventListener('click', () => {
+    document.querySelectorAll('.persona-card').forEach(el => el.classList.remove('selected'));
+    card.classList.add('selected');
+    selectedPersona = p.id;
+  });
+  gridEl.appendChild(card);
+});
+
+// ════════════════════════════════════════════
+// ISOMETRIC OFFICE PREVIEW
+// ════════════════════════════════════════════
+const officeCanvas = document.getElementById('office-canvas');
+const officeCtx = officeCanvas.getContext('2d');
+const W = 900, H = 320;
+const TW=64, TH=32;
+const CAM_X = W/2, CAM_Y = 60;
+
+function toIso(tx,ty) {
+  return { x: CAM_X+(tx-ty)*TW/2, y: CAM_Y+(tx+ty)*TH/2 };
+}
+
+const OFFICE_WORKERS = [
+  { name:'fi-backend1',  persona:'netrunner', status:'idle',         tx:2, ty:2 },
+  { name:'fi-backend2',  persona:'tech',      status:'busy',         tx:5, ty:2 },
+  { name:'fi-frontend1', persona:'fixer',     status:'pending_user', tx:8, ty:2 },
+  { name:'fi-frontend2', persona:'solo',      status:'offline',      tx:11,ty:2 },
+  { name:'ib-kha',       persona:'nomad',     status:'idle',         tx:14,ty:2 },
+];
+
+function drawOfficeFloor() {
+  for(let tx=0;tx<17;tx++) {
+    for(let ty=0;ty<5;ty++) {
+      const p = toIso(tx,ty);
+      const even=(tx+ty)%2===0;
+      officeCtx.beginPath();
+      officeCtx.moveTo(p.x, p.y);
+      officeCtx.lineTo(p.x+TW/2, p.y+TH/2);
+      officeCtx.lineTo(p.x, p.y+TH);
+      officeCtx.lineTo(p.x-TW/2, p.y+TH/2);
+      officeCtx.closePath();
+      officeCtx.fillStyle = even ? '#08060f' : '#0a0814';
+      officeCtx.fill();
+      officeCtx.strokeStyle = 'rgba(0,240,255,0.06)';
+      officeCtx.lineWidth = 0.5;
+      officeCtx.stroke();
+    }
+  }
+}
+
+function drawOfficeDesk(tx, ty, color) {
+  const p = toIso(tx,ty);
+  const x=p.x, y=p.y, dh=10;
+  officeCtx.save();
+  // Top
+  officeCtx.beginPath();
+  officeCtx.moveTo(x, y-dh);
+  officeCtx.lineTo(x+TW/2, y+TH/2-dh);
+  officeCtx.lineTo(x, y+TH-dh);
+  officeCtx.lineTo(x-TW/2, y+TH/2-dh);
+  officeCtx.closePath();
+  officeCtx.fillStyle='#0d0b1a';
+  officeCtx.fill();
+  officeCtx.shadowColor=color; officeCtx.shadowBlur=4;
+  officeCtx.strokeStyle=color+'55'; officeCtx.lineWidth=1;
+  officeCtx.stroke();
+  // Right
+  officeCtx.beginPath();
+  officeCtx.moveTo(x+TW/2,y+TH/2-dh); officeCtx.lineTo(x+TW/2,y+TH/2);
+  officeCtx.lineTo(x,y+TH); officeCtx.lineTo(x,y+TH-dh); officeCtx.closePath();
+  officeCtx.fillStyle='#08060f'; officeCtx.fill();
+  officeCtx.restore();
+}
+
+// ════════════════════════════════════════════
+// ANIMATION LOOP
+// ════════════════════════════════════════════
+let t=0;
+
+function loop() {
+  t += 0.016;
+  const pulse = Math.sin(t*2)*0.5+0.5;
+
+  // ── Showcase canvases ──
+  PERSONAS.forEach(p => {
+    const c = p._showcaseCanvas;
+    const cx2 = c.getContext('2d');
+    cx2.clearRect(0,0,c.width,c.height);
+    // Status cycles through all 4
+    const si = Math.floor(t*0.4) % 4;
+    const statuses = ['idle','busy','pending_user','offline'];
+    const sc = statusColor(statuses[si]);
+    RENDERERS[p.id](cx2, 60, 100, 2, sc, pulse);
+    // Status label
+    cx2.fillStyle = sc;
+    cx2.font='700 8px "Courier New"';
+    cx2.textAlign='center';
+    cx2.shadowColor=sc; cx2.shadowBlur=6;
+    cx2.fillText(statuses[si].replace('_',' ').toUpperCase(), 60, 150);
+    cx2.shadowBlur=0; cx2.textAlign='left';
+  });
+
+  // ── Settings grid canvases ──
+  PERSONAS.forEach(p => {
+    const c = p._settingsCanvas;
+    const cx2 = c.getContext('2d');
+    cx2.clearRect(0,0,c.width,c.height);
+    RENDERERS[p.id](cx2, 30, 48, 1, p.color, pulse);
+  });
+
+  // ── Office preview ──
+  officeCtx.fillStyle='#03020a';
+  officeCtx.fillRect(0,0,W,H);
+  // bg grid
+  officeCtx.strokeStyle='rgba(0,240,255,0.03)';
+  for(let gx=0;gx<W;gx+=40){officeCtx.beginPath();officeCtx.moveTo(gx,0);officeCtx.lineTo(gx,H);officeCtx.stroke();}
+  for(let gy=0;gy<H;gy+=40){officeCtx.beginPath();officeCtx.moveTo(0,gy);officeCtx.lineTo(W,gy);officeCtx.stroke();}
+
+  drawOfficeFloor();
+
+  OFFICE_WORKERS.forEach(w => {
+    const p = PERSONAS.find(x=>x.id===w.persona);
+    const sc2 = statusColor(w.status);
+    const sp = toIso(w.tx, w.ty);
+    drawOfficeDesk(w.tx, w.ty, p.color);
+    // NPC above desk
+    const nx=sp.x, ny=sp.y-30;
+    RENDERERS[w.persona](officeCtx, nx, ny, 1, sc2, pulse);
+    // Name
+    officeCtx.fillStyle=p.color;
+    officeCtx.font='700 8px "Courier New"';
+    officeCtx.textAlign='center';
+    officeCtx.shadowColor=p.color; officeCtx.shadowBlur=6;
+    officeCtx.fillText(w.name.toUpperCase(), nx, ny-28);
+    officeCtx.shadowBlur=0;
+    // Persona tag
+    officeCtx.fillStyle='rgba(200,200,255,0.25)';
+    officeCtx.font='8px "Courier New"';
+    officeCtx.fillText('['+w.persona+']', nx, ny-18);
+    officeCtx.textAlign='left';
+  });
+
+  // Moving scan beam
+  const sy = (t*40)%(H+40)-20;
+  const sg = officeCtx.createLinearGradient(0,sy-20,0,sy+20);
+  sg.addColorStop(0,'transparent');
+  sg.addColorStop(0.5,'rgba(0,240,255,0.03)');
+  sg.addColorStop(1,'transparent');
+  officeCtx.fillStyle=sg;
+  officeCtx.fillRect(0,sy-20,W,40);
+
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>

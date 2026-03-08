@@ -125,7 +125,14 @@ func (s *planSessionService) SendMessage(ctx context.Context, w http.ResponseWri
 	}
 
 	// Prepend scoping instruction so the agent stays concise and focused.
-	framedContent := "You are in a task scoping conversation. Your role is to ask focused clarifying questions to help the user define a clear, well-scoped task. Keep responses short and conversational — 2-4 sentences max. Do not execute any code or make file changes. If the user's goal seems too broad or vague, say so briefly and suggest a narrower starting point.\n\nUser: " + content
+	framedContent := "You are in a task scoping conversation. Help the user define a clear, well-scoped task.\n\n" +
+		"Rules:\n" +
+		"- If the user's request is vague, ask ONE focused clarifying question at a time (2-4 sentences max).\n" +
+		"- If the user says to start, go ahead, proceed, or gives an affirmative response to your last question — stop asking and provide the substantive answer immediately.\n" +
+		"- Do not ask for confirmation you already have. Do not repeat questions already answered.\n" +
+		"- You may use read-only shell commands (cat, rg, grep, find, ls, head, tail) to browse the codebase and understand context.\n" +
+		"- Do NOT write or modify files, run tests, install packages, start servers, or execute any code.\n\n" +
+		"User: " + content
 
 	// Stream agent reply.
 	reply, newResumeID, err := s.dispatcher.RunPlanStream(ctx, w, session.WorkerID, resumeID, framedContent)
@@ -133,7 +140,9 @@ func (s *planSessionService) SendMessage(ctx context.Context, w http.ResponseWri
 		return err
 	}
 
-	// Persist agent reply.
+	// Persist agent reply. Use background context — the request ctx may already be
+	// cancelled if the client disconnected while the CLI was still running.
+	saveCtx := context.Background()
 	if reply != "" {
 		agentMsg := &models.PlanMessage{
 			ID:            uuid.New(),
@@ -141,12 +150,12 @@ func (s *planSessionService) SendMessage(ctx context.Context, w http.ResponseWri
 			Role:          "agent",
 			Content:       reply,
 		}
-		_ = s.repo.AddMessage(ctx, agentMsg)
+		_ = s.repo.AddMessage(saveCtx, agentMsg)
 	}
 
 	// Update resume_id.
 	if newResumeID != "" {
-		_ = s.repo.UpdateResumeID(ctx, id, newResumeID)
+		_ = s.repo.UpdateResumeID(saveCtx, id, newResumeID)
 	}
 
 	return nil
@@ -173,19 +182,20 @@ func (s *planSessionService) Generate(ctx context.Context, w http.ResponseWriter
 		return err
 	}
 
+	saveCtx := context.Background()
 	if reply != "" {
-		_ = s.repo.UpdateGeneratedPrompt(ctx, id, reply)
+		_ = s.repo.UpdateGeneratedPrompt(saveCtx, id, reply)
 		agentMsg := &models.PlanMessage{
 			ID:            uuid.New(),
 			PlanSessionID: id,
 			Role:          "agent",
 			Content:       reply,
 		}
-		_ = s.repo.AddMessage(ctx, agentMsg)
+		_ = s.repo.AddMessage(saveCtx, agentMsg)
 	}
 
 	if newResumeID != "" {
-		_ = s.repo.UpdateResumeID(ctx, id, newResumeID)
+		_ = s.repo.UpdateResumeID(saveCtx, id, newResumeID)
 	}
 
 	return nil

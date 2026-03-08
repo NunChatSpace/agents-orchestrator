@@ -384,7 +384,14 @@ The Plans page is a discussion-first job creation flow backed by `plan_sessions`
 
 **Plan session states:** `pending` | `completed` | `discarded`
 
-**Discussion prompt framing:** Every `/message` turn prepends a hidden scoping instruction before sending to the agent: _"You are in a task scoping conversation. Your role is to ask focused clarifying questions… Keep responses short and conversational — 2-4 sentences max. Do not execute any code or make file changes. If the user's goal seems too broad or vague, say so briefly and suggest a narrower starting point."_ The `/generate` turn uses its own fixed instruction and is unaffected.
+**Discussion prompt framing:** Every `/message` turn prepends a hidden scoping instruction before sending to the agent:
+- Ask ONE focused clarifying question at a time (2–4 sentences max) if the request is vague.
+- If the user says to start, go ahead, or proceed — stop asking and provide a substantive answer immediately.
+- Do not re-ask questions already answered.
+- May use read-only shell commands (`cat`, `rg`, `grep`, `find`, `ls`, `head`, `tail`) to browse the codebase for context.
+- Must NOT write or modify files, run tests, install packages, start servers, or execute code.
+
+The `/generate` turn uses its own fixed instruction and is unaffected.
 
 **Plans page — list view (default):**
 
@@ -410,6 +417,24 @@ The Plans page is a discussion-first job creation flow backed by `plan_sessions`
 **Streaming:** Each agent turn is streamed via SSE. The frontend receives `event: thinking` events (intermediate steps, displayed as a pulsing indicator) and a final `event: done` event with the complete reply.
 
 **On error:** An "Error" label appears above the error message inside the chat view.
+
+**Client compatibility:** The Plans chat must work on both localhost and LAN HTTP access. If `crypto.randomUUID` is unavailable in the browser runtime, the frontend must fall back to a temporary client-generated message ID for optimistic user messages.
+
+**Markdown rendering:** Agent messages in the plan chat are rendered as Markdown using `marked` + `DOMPurify` (same as job chat). User messages are displayed as plain text. CSS for rendered Markdown is scoped to `.chat-bubble.agent .md-body` within the Plans page component (not inherited from `MessageBubble.svelte`, which is not mounted on this page).
+
+**Auto-scroll:** The chat feed scrolls to the bottom whenever a new message is added, the thinking indicator appears, or a streaming reply starts. Implemented with `tick()` to wait for DOM update before scrolling.
+
+**Orphaned message detection:** When a pending session is opened, if the last message in the feed has `role: 'user'` (meaning the agent never replied — e.g., backend was restarted or client disconnected before the reply was saved), a warning banner is shown above the chat feed with a **Resend** button. Clicking Resend re-sends that message to the agent.
+
+**Disconnect resilience:** The CLI subprocess on the backend uses a detached `context.Background()` with a 10-minute timeout (not the HTTP request context). This means the agent keeps running and its reply is saved to the database even if the frontend refreshes or the SSE connection is dropped. DB saves after streaming also use `context.Background()` to avoid cancellation.
+
+**SSE nginx configuration:** The `/message` and `/generate` SSE endpoints require a dedicated nginx location block:
+
+- `proxy_read_timeout 3600s` (default 60s causes 504 on long agent turns)
+- `proxy_buffering off` and `proxy_cache off` (prevents nginx from buffering SSE chunks)
+- `proxy_http_version 1.1` and `Connection ''` (keeps connection alive)
+
+**Auth session persistence:** The `(app)` layout calls `getMe()` directly in its own `onMount` before deciding to redirect to `/login`. This avoids a race condition where the nested layout runs before the root layout's `getMe()` has resolved, which previously caused a redirect on every page refresh.
 
 ### 17.1.3 Office Page (`/office`) — 2D Interaction Map
 
@@ -511,6 +536,15 @@ Show:
 - Cancel / Close action buttons when applicable
 
 Style: sticky, `backdrop-filter: blur(20px)`, violet bottom border
+
+### 17.6 Web Access and Routing
+
+Local/LAN access uses a single host-exposed port.
+
+- users open the app from `http://<host-or-lan-ip>:5174`
+- browser API calls use same-origin `/api/v1/*` paths
+- browser realtime connection uses same-origin `/ws`
+- `VITE_BACKEND_URL` should be empty in this mode so the frontend does not hardcode a separate backend origin
 
 ---
 
@@ -633,6 +667,16 @@ Do not include in v1:
 ### 22.11 Office Dispatch
 - New Job action from the interaction panel opens prefilled modal
 - submit creates + dispatches job successfully to selected worker
+
+### 22.12 Plans LAN Compatibility
+- `/plans` discussion chat works when opened from another device over `http://<LAN-IP>:5174`
+- sending a message must not fail when `crypto.randomUUID` is unavailable
+- optimistic user message still appears immediately before server refresh
+
+### 22.13 Single-Port Network Access
+- opening `http://<LAN-IP>:5174` from another device loads the full app
+- browser requests to `/api/v1/*` succeed without exposing a second backend port on host
+- browser websocket connection to `/ws` receives live worker/job updates
 
 ---
 

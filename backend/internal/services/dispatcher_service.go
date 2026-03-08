@@ -385,8 +385,13 @@ func (d *dispatcherService) RunPlanStream(ctx context.Context, w http.ResponseWr
 		}
 	}
 
+	// Use a background context so the CLI process survives HTTP client disconnects.
+	// The reply is still saved to DB after the process finishes.
+	cmdCtx, cmdCancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cmdCancel()
+
 	var stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, cliCmd, args...)
+	cmd := exec.CommandContext(cmdCtx, cliCmd, args...)
 	cmd.Dir = worker.Workspace
 	cmd.Stderr = &stderr
 
