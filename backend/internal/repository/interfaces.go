@@ -71,3 +71,18 @@ type UserRepository interface {
 	GetByUsername(ctx context.Context, username string) (*models.User, error)
 	Create(ctx context.Context, user *models.User) error
 }
+
+// PlanSessionRepository defines data access for plan sessions and their messages.
+type PlanSessionRepository interface {
+	Create(ctx context.Context, session *models.PlanSession) error
+	GetByID(ctx context.Context, id uuid.UUID) (*models.PlanSession, error)
+	List(ctx context.Context, userID uuid.UUID) ([]*models.PlanSession, error)
+	UpdateTitle(ctx context.Context, id uuid.UUID, title string) error
+	UpdateStatus(ctx context.Context, id uuid.UUID, status models.PlanSessionStatus) error
+	UpdateResumeID(ctx context.Context, id uuid.UUID, resumeID string) error
+	UpdateGeneratedPrompt(ctx context.Context, id uuid.UUID, prompt string) error
+	SoftDelete(ctx context.Context, id uuid.UUID) error
+
+	AddMessage(ctx context.Context, msg *models.PlanMessage) error
+	ListMessages(ctx context.Context, sessionID uuid.UUID) ([]*models.PlanMessage, error)
+}

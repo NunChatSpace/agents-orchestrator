@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -355,6 +356,138 @@ func truncateBytes(b []byte, max int) string {
 	return s[:max] + "…"
 }
 
+// RunPlanStream runs the worker's CLI and streams the reply via SSE to w.
+// It returns the full reply text and the new resume_id so the caller can persist them.
+func (d *dispatcherService) RunPlanStream(ctx context.Context, w http.ResponseWriter, workerID uuid.UUID, resumeID string, message string) (string, string, error) {
+	worker, err := d.workerRepo.GetByID(ctx, workerID)
+	if err != nil {
+		return "", "", fmt.Errorf("get worker: %w", err)
+	}
+
+	cliCmd := worker.CLICommand
+	if cliCmd == "" {
+		cliCmd = "claude"
+	}
+	isClaude := cliCmd == "claude"
+
+	var args []string
+	if isClaude {
+		args = []string{"-p"}
+		if resumeID != "" {
+			args = append(args, "--resume", resumeID)
+		}
+		args = append(args, message, "--output-format", "stream-json")
+	} else {
+		if resumeID != "" {
+			args = []string{"exec", "resume", resumeID, "--dangerously-bypass-approvals-and-sandbox", "--json", "--skip-git-repo-check", message}
+		} else {
+			args = []string{"exec", "--dangerously-bypass-approvals-and-sandbox", "--json", "--skip-git-repo-check", message}
+		}
+	}
+
+	var stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, cliCmd, args...)
+	cmd.Dir = worker.Workspace
+	cmd.Stderr = &stderr
+
+	stdoutPipe, pipeErr := cmd.StdoutPipe()
+	if pipeErr != nil {
+		return "", "", fmt.Errorf("stdout pipe: %w", pipeErr)
+	}
+	if startErr := cmd.Start(); startErr != nil {
+		return "", "", fmt.Errorf("CLI start: %w", startErr)
+	}
+
+	flusher, canFlush := w.(http.Flusher)
+
+	writeSSE := func(event, data string) {
+		// Encode data as JSON string to avoid SSE multiline issues.
+		encoded, _ := json.Marshal(data)
+		fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, string(encoded))
+		if canFlush {
+			flusher.Flush()
+		}
+	}
+
+	var finalResult, finalResumeID string
+	scanner := bufio.NewScanner(stdoutPipe)
+	scanner.Buffer(make([]byte, 4*1024*1024), 4*1024*1024)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+		var obj map[string]any
+		if json.Unmarshal([]byte(line), &obj) != nil {
+			continue
+		}
+
+		if isClaude {
+			switch obj["type"] {
+			case "assistant":
+				msg, _ := obj["message"].(map[string]any)
+				if msg == nil {
+					break
+				}
+				contents, _ := msg["content"].([]any)
+				for _, c := range contents {
+					item, _ := c.(map[string]any)
+					if item == nil {
+						continue
+					}
+					if item["type"] == "tool_use" {
+						toolName, _ := item["name"].(string)
+						inputBytes, _ := json.Marshal(item["input"])
+						writeSSE("thinking", fmt.Sprintf("%s: %s", toolName, truncateBytes(inputBytes, 300)))
+					}
+				}
+			case "result":
+				if r, ok := obj["result"].(string); ok && r != "" {
+					finalResult = r
+				}
+				if sid, ok := obj["session_id"].(string); ok {
+					finalResumeID = sid
+				}
+			}
+		} else {
+			switch obj["type"] {
+			case "thread.started":
+				if tid, ok := obj["thread_id"].(string); ok && tid != "" {
+					finalResumeID = tid
+				}
+			case "item.completed":
+				item, _ := obj["item"].(map[string]any)
+				if item == nil {
+					break
+				}
+				itemType, _ := item["type"].(string)
+				text, _ := item["text"].(string)
+				switch itemType {
+				case "reasoning":
+					if text != "" {
+						writeSSE("thinking", text)
+					}
+				case "agent_message":
+					if text != "" {
+						finalResult = text
+					}
+				}
+			}
+		}
+	}
+
+	if runErr := cmd.Wait(); runErr != nil {
+		stderrStr := strings.TrimSpace(stderr.String())
+		if stderrStr != "" {
+			return "", "", fmt.Errorf("agent CLI failed: %s", stderrStr)
+		}
+		return "", "", fmt.Errorf("agent CLI exited with code %d", cmd.ProcessState.ExitCode())
+	}
+
+	return finalResult, finalResumeID, nil
+}
+
 // RunPlan runs the worker's CLI synchronously with a planning prompt and returns the refined prompt text.
 func (d *dispatcherService) RunPlan(ctx context.Context, workerID uuid.UUID, task string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
@@ -387,7 +520,14 @@ func (d *dispatcherService) RunPlan(ctx context.Context, workerID uuid.UUID, tas
 
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("CLI failed: %w — %s", err, strings.TrimSpace(stderr.String()))
+		stderrStr := strings.TrimSpace(stderr.String())
+		if ctx.Err() == context.DeadlineExceeded {
+			return "", fmt.Errorf("plan generation timed out after 2 minutes")
+		}
+		if stderrStr != "" {
+			return "", fmt.Errorf("agent CLI failed: %s", stderrStr)
+		}
+		return "", fmt.Errorf("agent CLI exited with code %d", cmd.ProcessState.ExitCode())
 	}
 
 	var finalResult string

@@ -62,14 +62,14 @@ WAgent does **not** manage queue logic.
 ## 4. Worker Groups
 
 ### 4.1 Defined Groups
-- `fi-backend`
-- `fi-frontend`
-- `ib-kha`
+Groups are not hardcoded in the frontend. `TargetGroup` is typed as `string`. Groups are derived at runtime from the `group_name` field of registered workers.
+
+Current examples: `fi-backend`, `fi-frontend`, `ib-kha`.
 
 ### 4.2 Group Mapping
-- `fi-backend` -> `fi-backend1`, `fi-backend2`
-- `fi-frontend` -> `fi-frontend1`, `fi-frontend2`
-- `ib-kha` -> `ib-kha`
+- `fi-backend` → `fi-backend1`, `fi-backend2`
+- `fi-frontend` → `fi-frontend1`, `fi-frontend2`
+- `ib-kha` → `ib-kha`
 
 ---
 
@@ -311,6 +311,16 @@ There is no automatic retry in v1.
 
 Retry must be initiated by the user.
 
+### 16.0 Plan Generation Failures (RunPlan)
+
+`RunPlan` is a synchronous CLI call with a 2-minute timeout. Failures surface as human-readable messages:
+
+- Timeout: `"plan generation timed out after 2 minutes"`
+- CLI stderr present: `"agent CLI failed: <stderr text>"`
+- Non-zero exit, no stderr: `"agent CLI exited with code N"`
+
+These are returned as `422 PLAN_ERROR` from `POST /workers/{id}/plan` and displayed in the Plan tab error block.
+
 ### 16.2 Failure Reasons
 Store a normalized `failure_reason` when possible, for example:
 - `ack_timeout`
@@ -329,11 +339,76 @@ If a job failed:
 ## 17. UI Model
 
 ### 17.1 Layout
-Use a Codex-like threaded web app layout:
-- **Home page** = workspace selector + agent list + plan mode (default route `/`)
-- **Sidebar** = list of jobs
-- **Main pane** = message history for selected job
-- **Top bar** = job metadata/status
+
+The app uses a persistent top bar for global navigation with no sidebar.
+
+**Persistent top bar** (`routes/(app)/+layout.svelte`):
+
+- Logo (`◈ NEXUS`) — links to `/`
+- Workspace dropdown — one entry per unique `group_name` derived from `allWorkers`; updates `selectedGroup` store; persists across navigation
+- Nav links: **Agents** (→ `/`, active when path is `/` or starts with `/agents`) | **Plans** (→ `/plans`, active when path starts with `/plans`)
+
+**Pages:**
+
+- `/` — Agents page (agent grid, filtered by selected workspace)
+- `/agents/{id}/jobs` — Agent job list
+- `/agents/{id}/settings` — Agent settings + health check
+- `/plans` — Plans page (discussion-first job creation)
+- `/jobs/{id}` — Job chat feed
+
+### 17.1.1 Agents Page (`/`)
+
+The home page shows agent cards filtered by the selected workspace group.
+
+**Agent card:**
+
+- Header: name, group, status pill
+- Body: workspace path, CLI command, last active time
+- Clicking the card header or body navigates to `/agents/{id}/jobs` (primary action)
+- Footer buttons:
+  - **Jobs** → `/agents/{id}/jobs`
+  - **Settings** → `/agents/{id}/settings`
+  - **VSCode** → `vscode://file{hostWorkspace}` where `hostWorkspace` is the worker's container path with the `/workspaces` prefix replaced by `PUBLIC_WORKSPACES_PATH` (a Vite public env var set in `.env`, same value as the Docker bind-mount path). Falls back to the raw container path if the var is unset.
+
+### 17.1.1a Agent Sub-Pages (`/agents/{id}/…`)
+
+A shared layout (`routes/(app)/agents/[worker_id]/+layout.svelte`) renders the agent header (name, status, group/workspace, delete button) and a **Jobs | Settings** sub-nav bar. Child pages:
+
+- **Jobs** (`/agents/{id}/jobs`) — job list filtered to `assigned_worker_id === id`, sorted by `updated_at DESC`. Clicking a row navigates to `/jobs/{job_id}`. **New Job** button opens a modal to dispatch a new job directly to this agent.
+- **Settings** (`/agents/{id}/settings`) — displays CLI command, last active time, workspace path, git repo URL. Includes **Run Health Check** button that calls `POST /api/v1/workers/{id}/ping`.
+
+### 17.1.2 Plans Page (`/plans`) — Discussion-First
+
+The Plans page is a discussion-first job creation flow backed by `plan_sessions`.
+
+**Plan session states:** `pending` | `completed` | `discarded`
+
+**Discussion prompt framing:** Every `/message` turn prepends a hidden scoping instruction before sending to the agent: _"You are in a task scoping conversation. Your role is to ask focused clarifying questions… Keep responses short and conversational — 2-4 sentences max. Do not execute any code or make file changes. If the user's goal seems too broad or vague, say so briefly and suggest a narrower starting point."_ The `/generate` turn uses its own fixed instruction and is unaffected.
+
+**Plans page — list view (default):**
+
+- Shows all non-discarded plan sessions for the user (title, status badge, relative time).
+- Worker selector dropdown (filtered by selected workspace group) + **"Let's discuss plan"** button to create a new session.
+- Sessions are sorted by `updated_at DESC`.
+
+**Plans page — session detail view (chat):**
+
+1. User and the selected worker agent exchange messages in a chat feed.
+2. Agent messages are streamed via SSE (`POST /api/v1/plan-sessions/{id}/message`).
+3. When the user is satisfied, clicks **Generate Plan** (enabled after ≥ 2 messages).
+4. Backend sends the final instruction to the agent: `"Based on our discussion, write a clear, detailed task prompt. Output ONLY the prompt text."` — streamed via SSE (`POST /api/v1/plan-sessions/{id}/generate`).
+5. **Generate Plan** button shows elapsed seconds while the agent is working (`Generating… 14s`).
+6. Generated prompt fills an editable textarea. User edits if needed, then clicks **Confirm & Create Job**.
+7. `POST /api/v1/plan-sessions/{id}/complete` → session status → `completed`. Then `POST /api/v1/jobs` + `POST /api/v1/jobs/{id}/submit` → navigate to `/jobs/{id}`.
+8. **Discard** button soft-deletes the session (status → `discarded`, hidden from list).
+
+**Resuming a pending session:** User clicks a pending session in the list → chat feed reloads from DB → user can continue where they left off. The worker agent receives the full prior context via `resume_id`.
+
+**Session title:** Auto-set from the first user message (truncated to 80 chars), editable via `PATCH /api/v1/plan-sessions/{id}`.
+
+**Streaming:** Each agent turn is streamed via SSE. The frontend receives `event: thinking` events (intermediate steps, displayed as a pulsing indicator) and a final `event: done` event with the complete reply.
+
+**On error:** An "Error" label appears above the error message inside the chat view.
 
 ### 17.2 Design System — NEXUS Theme
 
@@ -377,25 +452,7 @@ Tokens are defined in `frontend/src/app.css` under `:root` and mirrored in `tail
 
 ### 17.3 Sidebar
 
-Display:
-
-- `title`
-- `target_group`
-- `assigned_worker`
-- `status`
-- `updated_at`
-
-Rules:
-
-- sort by `updated_at desc`
-- filter by `status`
-- filter by `target_group`
-
-Visual:
-
-- NEXUS brand logo + "Agent Orchestrator" subtitle at the top
-- Job count badge on the Jobs section label
-- Violet `New Job` button spanning full sidebar width
+**Removed.** Navigation is handled by the persistent top bar (§17.1). Job history is accessible via the agent jobs page (`/agents/{id}/jobs`).
 
 ### 17.4 Main Pane
 
@@ -410,6 +467,9 @@ Message bubble appearance:
 - `user` role → violet gradient bubble, right-aligned
 - `oagent` / `worker` role → dark glass bubble with lavender text, left-aligned
 - `system` kind → muted italic, left-aligned
+- `instruction` kind → prominent full-width block with a labelled header ("Instruction sent to agent"), shown before other feed messages; not a bubble
+
+All bubble content and instruction blocks render Markdown (parsed with `marked`, sanitized with `DOMPurify`). Supports bold, italic, code spans, fenced code blocks, lists, blockquotes, and tables.
 
 ### 17.5 Top Bar
 

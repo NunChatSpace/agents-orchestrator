@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '---\\nAGENTS.md CONTRACT — check before every response:\\n1. Read AGENTS.md → spec → ARCHITECTURE.md FIRST (do not rely on memory alone)\\n2. Present a plan (affected files + assumptions) BEFORE touching any code\\n3. Docs (spec / ARCHITECTURE.md) are part of Done — update them in the same task, not as a follow-up\\n4. If anything conflicts between sources, STOP and point it out — do not silently resolve\\n---'"
+          }
+        ]
+      }
+    ]
+  }
+}

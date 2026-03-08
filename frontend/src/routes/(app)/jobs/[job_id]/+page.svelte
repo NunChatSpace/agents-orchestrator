@@ -114,6 +114,23 @@
 </script>
 
 <style>
+	.job-shell {
+		flex: 1;
+		overflow: hidden;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.job-inner {
+		max-width: 900px;
+		width: 100%;
+		margin: 0 auto;
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+
 	.tab-bar {
 		display: flex;
 		border-bottom: 1px solid rgba(139,92,246,0.15);
@@ -172,35 +189,37 @@
 {:else if error}
 	<div class="flex-1 flex items-center justify-center text-red-400 text-sm">{error}</div>
 {:else if $activeJob}
-	<div class="flex-1 flex flex-col overflow-hidden">
-		<TopBar job={$activeJob} on:cancel={handleCancel} on:close={handleClose} on:finish={handleFinish} />
-		<div class="tab-bar">
-			<button class="tab {activeTab === 'chat' ? 'active' : ''}" on:click={() => switchTab('chat')}>
-				Chat
-			</button>
-			<button class="tab {activeTab === 'changes' ? 'active' : ''}" on:click={() => switchTab('changes')}>
-				Changes
-			</button>
-		</div>
-		<div class="tab-content">
-			{#if activeTab === 'chat'}
-				<div class="chat-panel">
-					<MessageFeed messages={$activeMessages} status={$activeJob.status} on:choose={handleChoose} />
-					<Composer
-						enabled={$composerEnabled}
-						loading={sending}
-						disabledMessage={
-							$activeJob?.status === 'draft' ? 'Select an agent in the sidebar first.' :
-							$activeJob?.status === 'failed' ? 'Job failed — see messages above.' :
-							$activeJob?.status === 'cancelled' ? 'Job was cancelled.' :
-							'Waiting for worker response…'
-						}
-						on:send={handleSend}
-					/>
-				</div>
-			{:else}
-				<ChangesPanel jobId={$activeJob.job_id} />
-			{/if}
+	<div class="job-shell">
+		<div class="job-inner">
+			<TopBar job={$activeJob} on:cancel={handleCancel} on:close={handleClose} on:finish={handleFinish} />
+			<div class="tab-bar">
+				<button class="tab {activeTab === 'chat' ? 'active' : ''}" on:click={() => switchTab('chat')}>
+					Chat
+				</button>
+				<button class="tab {activeTab === 'changes' ? 'active' : ''}" on:click={() => switchTab('changes')}>
+					Changes
+				</button>
+			</div>
+			<div class="tab-content">
+				{#if activeTab === 'chat'}
+					<div class="chat-panel">
+						<MessageFeed messages={$activeMessages} status={$activeJob.status} on:choose={handleChoose} />
+						<Composer
+							enabled={$composerEnabled}
+							loading={sending}
+							disabledMessage={
+								$activeJob?.status === 'draft' ? 'Select an agent in the sidebar first.' :
+								$activeJob?.status === 'failed' ? 'Job failed — see messages above.' :
+								$activeJob?.status === 'cancelled' ? 'Job was cancelled.' :
+								'Waiting for worker response…'
+							}
+							on:send={handleSend}
+						/>
+					</div>
+				{:else}
+					<ChangesPanel jobId={$activeJob.job_id} />
+				{/if}
+			</div>
 		</div>
 	</div>
 {/if}

@@ -22,6 +22,7 @@ func buildRouter(
 	jobCtrl *controllers.JobController,
 	msgCtrl *controllers.MessageController,
 	workerCtrl *controllers.WorkerController,
+	planCtrl *controllers.PlanSessionController,
 ) http.Handler {
 	r := mux.NewRouter()
 
@@ -77,6 +78,16 @@ func buildRouter(
 	priv.HandleFunc("/workers/{worker_id}", workerCtrl.Delete).Methods(http.MethodDelete)
 	priv.HandleFunc("/workers/{worker_id}/ping", workerCtrl.Ping).Methods(http.MethodPost)
 	priv.HandleFunc("/workers/{worker_id}/plan", workerCtrl.Plan).Methods(http.MethodPost)
+
+	// Plan sessions
+	priv.HandleFunc("/plan-sessions", planCtrl.List).Methods(http.MethodGet)
+	priv.HandleFunc("/plan-sessions", planCtrl.Create).Methods(http.MethodPost)
+	priv.HandleFunc("/plan-sessions/{id}", planCtrl.Get).Methods(http.MethodGet)
+	priv.HandleFunc("/plan-sessions/{id}", planCtrl.UpdateTitle).Methods(http.MethodPatch)
+	priv.HandleFunc("/plan-sessions/{id}/message", planCtrl.SendMessage).Methods(http.MethodPost)
+	priv.HandleFunc("/plan-sessions/{id}/generate", planCtrl.Generate).Methods(http.MethodPost)
+	priv.HandleFunc("/plan-sessions/{id}/complete", planCtrl.Complete).Methods(http.MethodPost)
+	priv.HandleFunc("/plan-sessions/{id}/discard", planCtrl.Discard).Methods(http.MethodPost)
 
 	// WebSocket — registered at root (not under /api/v1) to match frontend expectation.
 	wsHandler := middleware.RequireSession(authSvc)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

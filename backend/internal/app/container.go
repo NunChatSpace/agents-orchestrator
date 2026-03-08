@@ -25,6 +25,7 @@ func BuildContainer() (*dig.Container, error) {
 		repository.NewWorkerRepo,
 		repository.NewJobRepo,
 		repository.NewMessageRepo,
+		repository.NewPlanSessionRepo,
 
 		// WS hub — provide both concrete *ws.Hub and services.WSBroadcaster
 		ws.NewHub,
@@ -36,12 +37,14 @@ func BuildContainer() (*dig.Container, error) {
 		services.NewSchedulerService,
 		services.NewJobService,
 		services.NewWorkerService,
+		services.NewPlanSessionService,
 
 		// Controllers
 		controllers.NewAuthController,
 		controllers.NewJobController,
 		controllers.NewMessageController,
 		controllers.NewWorkerController,
+		controllers.NewPlanSessionController,
 
 		// Router
 		provideRouter,
@@ -91,6 +94,7 @@ func provideRouter(
 	jobCtrl *controllers.JobController,
 	msgCtrl *controllers.MessageController,
 	workerCtrl *controllers.WorkerController,
+	planCtrl *controllers.PlanSessionController,
 ) http.Handler {
-	return buildRouter(authSvc, workerRepo, hub, authCtrl, jobCtrl, msgCtrl, workerCtrl)
+	return buildRouter(authSvc, workerRepo, hub, authCtrl, jobCtrl, msgCtrl, workerCtrl, planCtrl)
 }

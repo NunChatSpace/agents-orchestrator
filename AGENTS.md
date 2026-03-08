@@ -1,5 +1,34 @@
 # AGENTS.md
 
+## MANDATORY CHECKLIST — run before every task
+
+These are not optional. A task does not begin until all three are confirmed.
+
+**[ ] 1. Re-read the required files (in order)**
+- `AGENTS.md` (this file)
+- `.agent/specs/spec_v1_oagent_wagent_webapp.md`
+- `.agent/ARCHITECTURE.md`
+
+Do not start from memory alone. Do not assume memory matches current state.
+
+**[ ] 2. Present a plan before touching code**
+
+Write out:
+- what will change and why
+- which files will be affected
+- any assumptions or missing information
+
+Wait for approval. Do not implement first and explain after.
+
+**[ ] 3. Update docs as part of the same task**
+
+- Product behavior change → update `spec_v1_oagent_wagent_webapp.md`
+- System structure change → update `ARCHITECTURE.md`
+
+Docs are part of Done. Do not leave them for a follow-up or wait for the user to ask.
+
+---
+
 ## Purpose
 This file defines the general working contract for any agent contributing to this project.
 

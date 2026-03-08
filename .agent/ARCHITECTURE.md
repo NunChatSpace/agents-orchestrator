@@ -626,6 +626,69 @@ WHERE search_vector @@ plainto_tsquery('english', $1);
 | Deploy | Docker, Kubernetes |
 | UI Fonts | Inter, Space Grotesk (Google Fonts) |
 | UI Design System | NEXUS (dark cyber-premium theme, see spec §17.2) |
+| Markdown | `marked` (parse) + `DOMPurify` (sanitize) — chat bubbles and instruction blocks |
+
+---
+
+## Project-Specific Notes (Agent Orchestrator)
+
+### API Endpoints — Workers
+
+| Method | Path | Handler | Notes |
+| --- | --- | --- | --- |
+| GET | `/api/v1/workers` | `WorkerController.List` | List all workers |
+| POST | `/api/v1/workers` | `WorkerController.Create` | Register worker |
+| GET | `/api/v1/workers/{worker_id}` | `WorkerController.Get` | Get single worker |
+| PATCH | `/api/v1/workers/{worker_id}` | `WorkerController.Update` | Update CLI command etc. |
+| DELETE | `/api/v1/workers/{worker_id}` | `WorkerController.Delete` | Remove worker |
+| POST | `/api/v1/workers/{worker_id}/ping` | `WorkerController.Ping` | Health check |
+| POST | `/api/v1/workers/{worker_id}/plan` | `WorkerController.Plan` | Run CLI in plan mode; returns `{ prompt: string }` |
+
+### API Endpoints — Plan Sessions
+
+| Method | Path | Handler | Notes |
+| --- | --- | --- | --- |
+| GET | `/api/v1/plan-sessions` | `PlanSessionController.List` | List non-discarded sessions for user |
+| POST | `/api/v1/plan-sessions` | `PlanSessionController.Create` | Create new session `{ worker_id }` |
+| GET | `/api/v1/plan-sessions/{id}` | `PlanSessionController.Get` | Get session + messages |
+| PATCH | `/api/v1/plan-sessions/{id}` | `PlanSessionController.UpdateTitle` | Edit title |
+| POST | `/api/v1/plan-sessions/{id}/message` | `PlanSessionController.SendMessage` | Send user message → SSE stream agent reply |
+| POST | `/api/v1/plan-sessions/{id}/generate` | `PlanSessionController.Generate` | Final generate → SSE stream; stores `generated_prompt` |
+| POST | `/api/v1/plan-sessions/{id}/complete` | `PlanSessionController.Complete` | Mark completed |
+| POST | `/api/v1/plan-sessions/{id}/discard` | `PlanSessionController.Discard` | Soft-delete session |
+
+### DispatcherService
+
+`DispatcherService` (in `services/dispatcher_service.go`) manages all CLI subprocess execution.
+
+Key methods:
+
+- `SendToWorker` — launches a job asynchronously (goroutine), streams JSONL output, stores messages.
+- `RunPlan(ctx, workerID, task) (string, error)` — **synchronous** (2-minute timeout). Runs the worker's CLI with a prompt-refinement instruction. Returns the final text. Used by `WorkerController.Plan`.
+- `RunPlanStream(ctx, w, workerID, resumeID, message) (reply, newResumeID, error)` — **streaming**. Runs the worker's CLI and writes SSE events to `w` as the agent responds. Used by `PlanSessionController` for discussion turns and plan generation.
+
+### Frontend Stores
+
+| Store | File | Type | Purpose |
+| --- | --- | --- | --- |
+| `allWorkers` | `stores/workers.ts` | `Worker[]` | All registered workers, populated via WS + REST |
+| `selectedWorker` | `stores/selectedWorker.ts` | `Worker \| null` | Currently viewed agent detail |
+| `selectedGroup` | `stores/selectedGroup.ts` | `string` | Active workspace group; persists across navigation |
+| `jobs` | `stores/jobs.ts` | `Job[]` | All jobs; updated via `upsertJob` |
+
+### Frontend Routes
+
+| Route | File | Purpose |
+| --- | --- | --- |
+| `/` | `routes/(app)/+page.svelte` | Agents page — card grid filtered by selected workspace |
+| `/agents/[worker_id]/jobs` | `routes/(app)/agents/[worker_id]/jobs/+page.svelte` | Job list for a specific agent |
+| `/agents/[worker_id]/settings` | `routes/(app)/agents/[worker_id]/settings/+page.svelte` | Agent settings + health check |
+| `/plans` | `routes/(app)/plans/+page.svelte` | Plans page — discussion-first job creation |
+| `/jobs/[job_id]` | `routes/(app)/jobs/[job_id]/+page.svelte` | Job chat feed |
+
+Shared layout `routes/(app)/+layout.svelte` renders the persistent top bar (logo, workspace dropdown, Agents \| Plans nav) for all app routes.
+
+Shared layout `routes/(app)/agents/[worker_id]/+layout.svelte` renders the agent header and Jobs \| Settings sub-nav for agent sub-pages.
 
 ---
 
