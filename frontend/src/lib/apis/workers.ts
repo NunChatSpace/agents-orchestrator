@@ -1,5 +1,5 @@
 import { GET, POST, PATCH, DELETE } from './client';
-import type { Worker, CreateWorkerPayload, PingResult } from '../../types/worker';
+import type { Worker, CreateWorkerPayload, PingResult, UpdateWorkerPayload } from '../../types/worker';
 
 export const listWorkers = () => GET<Worker[]>('/workers');
 
@@ -8,8 +8,8 @@ export const getWorker = (workerId: string) => GET<Worker>(`/workers/${workerId}
 export const createWorker = (payload: CreateWorkerPayload) =>
 	POST<Worker>('/workers', payload);
 
-export const updateWorkerCLI = (workerId: string, cliCommand: string) =>
-	PATCH<Worker>(`/workers/${workerId}`, { cli_command: cliCommand });
+export const updateWorker = (workerId: string, payload: UpdateWorkerPayload) =>
+	PATCH<Worker>(`/workers/${workerId}`, payload);
 
 export const pingWorker = (workerId: string) =>
 	POST<PingResult>(`/workers/${workerId}/ping`, {});

@@ -346,7 +346,7 @@ The app uses a persistent top bar for global navigation with no sidebar.
 
 - Logo (`◈ NEXUS`) — links to `/`
 - Workspace dropdown — one entry per unique `group_name` derived from `allWorkers`; updates `selectedGroup` store; persists across navigation
-- Nav links: **Agents** (→ `/`, active when path is `/` or starts with `/agents`) | **Plans** (→ `/plans`, active when path starts with `/plans`)
+- Nav links: **Agents** (→ `/`, active when path is `/` or starts with `/agents`) | **Plans** (→ `/plans`, active when path starts with `/plans`) | **Office** (→ `/office`, active when path starts with `/office`)
 
 **Pages:**
 
@@ -354,6 +354,7 @@ The app uses a persistent top bar for global navigation with no sidebar.
 - `/agents/{id}/jobs` — Agent job list
 - `/agents/{id}/settings` — Agent settings + health check
 - `/plans` — Plans page (discussion-first job creation)
+- `/office` — Office page (2D map interaction surface)
 - `/jobs/{id}` — Job chat feed
 
 ### 17.1.1 Agents Page (`/`)
@@ -368,14 +369,14 @@ The home page shows agent cards filtered by the selected workspace group.
 - Footer buttons:
   - **Jobs** → `/agents/{id}/jobs`
   - **Settings** → `/agents/{id}/settings`
-  - **VSCode** → `vscode://file{hostWorkspace}` where `hostWorkspace` is the worker's container path with the `/workspaces` prefix replaced by `PUBLIC_WORKSPACES_PATH` (a Vite public env var set in `.env`, same value as the Docker bind-mount path). Falls back to the raw container path if the var is unset.
+  - **VSCode** → `vscode://file{hostWorkspace}` where `hostWorkspace` is the worker's container path with the `/workspaces` prefix replaced by `WORKSPACES_PATH` (a Vite public env var set in `.env`, same value as the Docker bind-mount path). Falls back to the raw container path if the var is unset.
 
 ### 17.1.1a Agent Sub-Pages (`/agents/{id}/…`)
 
 A shared layout (`routes/(app)/agents/[worker_id]/+layout.svelte`) renders the agent header (name, status, group/workspace, delete button) and a **Jobs | Settings** sub-nav bar. Child pages:
 
 - **Jobs** (`/agents/{id}/jobs`) — job list filtered to `assigned_worker_id === id`, sorted by `updated_at DESC`. Clicking a row navigates to `/jobs/{job_id}`. **New Job** button opens a modal to dispatch a new job directly to this agent.
-- **Settings** (`/agents/{id}/settings`) — displays CLI command, last active time, workspace path, git repo URL. Includes **Run Health Check** button that calls `POST /api/v1/workers/{id}/ping`.
+- **Settings** (`/agents/{id}/settings`) — displays CLI command, last active time, workspace path, git repo URL. Includes **Run Health Check** button that calls `POST /api/v1/workers/{id}/ping`. Includes **Office Position** fields (`map_x`, `map_y`) saved via `PATCH /api/v1/workers/{id}`.
 
 ### 17.1.2 Plans Page (`/plans`) — Discussion-First
 
@@ -409,6 +410,35 @@ The Plans page is a discussion-first job creation flow backed by `plan_sessions`
 **Streaming:** Each agent turn is streamed via SSE. The frontend receives `event: thinking` events (intermediate steps, displayed as a pulsing indicator) and a final `event: done` event with the complete reply.
 
 **On error:** An "Error" label appears above the error message inside the chat view.
+
+### 17.1.3 Office Page (`/office`) — 2D Interaction Map
+
+The Office page renders a top-down tile map via HTML5 Canvas with no game engine dependency.
+
+Core behavior:
+
+- Worker agents appear as NPCs at desk coordinates resolved in this order:
+  1. explicit worker `map_x`/`map_y` when either is non-zero
+  2. pre-configured desk mapping
+  3. group-based fallback placement by registration order (`created_at`)
+- Worker visual state updates live from the existing WebSocket worker events (`allWorkers` store)
+- User avatar movement:
+  - keyboard: WASD / Arrow keys
+  - mobile: on-screen D-pad
+  - speed: 4 tiles/second
+  - collisions: walls + desk tiles
+- Proximity interaction:
+  - prompt appears when within 2 tiles of nearest worker desk
+  - `E` or click worker opens side panel
+- Interaction panel includes:
+  - worker header (name, group, status, workspace)
+  - active job (if present)
+  - last 3 jobs for that worker (derived from existing `/api/v1/jobs` list; no new backend endpoint)
+  - actions: **New Job**, **View All Jobs**, **Settings**
+- New Job flow from panel reuses existing modal/form with:
+  - prefilled `target_group`
+  - prefilled `manual_worker_override`
+  - submit path remains `POST /api/v1/jobs` + `POST /api/v1/jobs/{id}/submit`
 
 ### 17.2 Design System — NEXUS Theme
 
@@ -591,6 +621,19 @@ Do not include in v1:
 - sidebar shows jobs with title, group, worker, status, and updated time
 - main pane shows full history of selected job
 
+### 22.9 Office Rendering
+- `/office` renders a tile-based 2D office map with worker NPCs
+- worker status visuals update in real-time without page reload
+
+### 22.10 Office Interaction
+- user can move avatar with keyboard and mobile D-pad
+- collision blocks movement through wall and desk tiles
+- proximity prompt appears within 2 tiles and `E`/click opens interaction panel
+
+### 22.11 Office Dispatch
+- New Job action from the interaction panel opens prefilled modal
+- submit creates + dispatches job successfully to selected worker
+
 ---
 
 ## 23. Open Questions for v2
@@ -600,4 +643,3 @@ Not part of v1, but likely future topics:
 - should we support attachments?
 - should we support per-job templates?
 - should we support worker-specific structured actions?
-

@@ -5,8 +5,6 @@ services:
       POSTGRES_DB: oagent
       POSTGRES_USER: oagent
       POSTGRES_PASSWORD: secret
-    ports:
-      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -26,19 +24,17 @@ services:
       SEED_PASSWORD: changeme
       PORT: 8080
       LOG_LEVEL: info
-      FRONTEND_ORIGIN: http://localhost:5174
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5174}
       GIT_TOKEN: ${GIT_TOKEN:-}
     volumes:
       # Workspace root — each worker's subdir is mounted here.
       # migration 004 sets worker.workspace = /workspaces/<name>
-      - ${PUBLIC_WORKSPACES_PATH:-}:/workspaces
+      - ${WORKSPACES_PATH:-}:/workspaces
       # Share host SSH keys and git config so git clone works without re-setup on rebuild.
       - ~/.ssh:/root/.ssh:ro
       - ~/.gitconfig:/root/.gitconfig:ro
       # Share host codex auth so CLI agents inside the container use the same login session.
       - ~/.codex:/root/.codex
-    ports:
-      - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,10 +48,18 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_BACKEND_URL: http://localhost:8080
-    ports:
-      - "5174:5173"
+        VITE_BACKEND_URL: ${VITE_BACKEND_URL:-}
     depends_on:
+      - backend
+
+  proxy:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./infra/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "5174:80"
+    depends_on:
+      - frontend
       - backend
 
 volumes:

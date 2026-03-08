@@ -1,10 +1,25 @@
 <script lang="ts">
-	import { pingWorker } from '../../../../../lib/apis/workers';
+	import { pingWorker, updateWorker } from '../../../../../lib/apis/workers';
 	import { selectedWorker } from '../../../../../stores/selectedWorker';
+	import { upsertWorker } from '../../../../../stores/workers';
 	import type { PingResult } from '../../../../../types/worker';
 
 	let pinging = false;
 	let pingResult: PingResult | null = null;
+	let savingPosition = false;
+	let mapX = '0';
+	let mapY = '0';
+	let positionError = '';
+	let positionMessage = '';
+	let positionWorkerId = '';
+
+	$: if ($selectedWorker && $selectedWorker.worker_id !== positionWorkerId) {
+		positionWorkerId = $selectedWorker.worker_id;
+		mapX = String($selectedWorker.map_x ?? 0);
+		mapY = String($selectedWorker.map_y ?? 0);
+		positionError = '';
+		positionMessage = '';
+	}
 
 	function relativeTime(iso: string): string {
 		const diff = Date.now() - new Date(iso).getTime();
@@ -26,6 +41,37 @@
 			pingResult = { ok: false, output: '', error: 'Request failed' };
 		} finally {
 			pinging = false;
+		}
+	}
+
+	async function savePosition() {
+		if (!$selectedWorker) return;
+		const nextX = Number.parseInt(mapX, 10);
+		const nextY = Number.parseInt(mapY, 10);
+		positionError = '';
+		positionMessage = '';
+
+		if (!Number.isInteger(nextX) || !Number.isInteger(nextY)) {
+			positionError = 'X and Y must be integers';
+			return;
+		}
+		if (nextX < 0 || nextY < 0) {
+			positionError = 'X and Y must be 0 or greater';
+			return;
+		}
+
+		savingPosition = true;
+		try {
+			const updated = await updateWorker($selectedWorker.worker_id, { map_x: nextX, map_y: nextY });
+			selectedWorker.set(updated);
+			upsertWorker(updated);
+			mapX = String(updated.map_x);
+			mapY = String(updated.map_y);
+			positionMessage = 'Office position saved';
+		} catch (e: unknown) {
+			positionError = e instanceof Error ? e.message : 'Failed to save office position';
+		} finally {
+			savingPosition = false;
 		}
 	}
 </script>
@@ -61,6 +107,44 @@
 					<div class="info-value mono">{$selectedWorker.git_repo_url || '—'}</div>
 				</div>
 			</div>
+		</div>
+
+		<!-- Office Position -->
+		<div class="section">
+			<div class="section-header">
+				<div class="section-title">
+					<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path d="M12 2l3 6h6l-4.5 4.5L18 20l-6-3-6 3 1.5-7.5L3 8h6z"/>
+					</svg>
+					Office Position
+				</div>
+				<button class="ping-btn" on:click={savePosition} disabled={savingPosition}>
+					{#if savingPosition}
+						<span class="spinner"></span> Saving…
+					{:else}
+						Save Position
+					{/if}
+				</button>
+			</div>
+
+			<div class="position-grid">
+				<div class="position-field">
+					<label class="position-label" for="map-x">X tile</label>
+					<input id="map-x" class="nx-input" type="number" min="0" step="1" bind:value={mapX} />
+				</div>
+				<div class="position-field">
+					<label class="position-label" for="map-y">Y tile</label>
+					<input id="map-y" class="nx-input" type="number" min="0" step="1" bind:value={mapY} />
+				</div>
+			</div>
+
+			{#if positionError}
+				<p class="position-error">{positionError}</p>
+			{:else if positionMessage}
+				<p class="position-ok">{positionMessage}</p>
+			{:else}
+				<p class="position-hint">Default fallback is auto-placement by group when both values are 0.</p>
+			{/if}
 		</div>
 
 		<!-- Health Check -->
@@ -165,6 +249,41 @@
 	.info-label { font-size: 9.5px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(196,181,253,0.3); }
 	.info-value { font-size: 12.5px; color: rgba(196,181,253,0.75); word-break: break-all; }
 	.info-value.mono { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11.5px; color: #a78bfa; }
+
+	.position-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 10px;
+	}
+
+	.position-field {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+
+	.position-label {
+		font-size: 10px;
+		font-weight: 600;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: rgba(196,181,253,0.38);
+	}
+
+	.position-hint {
+		font-size: 12px;
+		color: rgba(196,181,253,0.34);
+	}
+
+	.position-error {
+		font-size: 12.5px;
+		color: #fca5a5;
+	}
+
+	.position-ok {
+		font-size: 12.5px;
+		color: #4ade80;
+	}
 
 	.ping-btn {
 		display: inline-flex;

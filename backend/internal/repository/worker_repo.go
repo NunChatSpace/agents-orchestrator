@@ -95,16 +95,22 @@ func (r *workerRepo) GetOrCreateGroup(ctx context.Context, groupName string) (uu
 func (r *workerRepo) CreateWorker(ctx context.Context, worker *models.Worker) error {
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO workers
-		  (worker_id, group_id, name, callback_url, api_key_hash, workspace, cli_command, git_repo_url, status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		  (worker_id, group_id, name, callback_url, api_key_hash, workspace, cli_command, git_repo_url, map_x, map_y, status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 		worker.WorkerID, worker.GroupID, worker.Name, worker.CallbackURL,
-		worker.APIKeyHash, worker.Workspace, worker.CLICommand, worker.GitRepoURL, worker.Status)
+		worker.APIKeyHash, worker.Workspace, worker.CLICommand, worker.GitRepoURL, worker.MapX, worker.MapY, worker.Status)
 	return err
 }
 
 func (r *workerRepo) UpdateCLICommand(ctx context.Context, workerID uuid.UUID, cliCommand string) error {
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE workers SET cli_command=$1 WHERE worker_id=$2`, cliCommand, workerID)
+	return err
+}
+
+func (r *workerRepo) UpdateMapPosition(ctx context.Context, workerID uuid.UUID, mapX, mapY int) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE workers SET map_x=$1, map_y=$2 WHERE worker_id=$3`, mapX, mapY, workerID)
 	return err
 }
 

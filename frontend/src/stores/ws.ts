@@ -17,8 +17,8 @@ interface WSEvent {
 export function connectWS() {
 	if (socket?.readyState === WebSocket.OPEN) return;
 
-	// Use VITE_BACKEND_URL when set (Docker), otherwise same-origin WS.
-	const backendOrigin = import.meta.env.VITE_BACKEND_URL ?? `${location.protocol}//${location.host}`;
+	// Use VITE_BACKEND_URL when non-empty, otherwise same-origin WS.
+	const backendOrigin = import.meta.env.VITE_BACKEND_URL || `${location.protocol}//${location.host}`;
 	const protocol = backendOrigin.startsWith('https') ? 'wss' : 'ws';
 	const host = backendOrigin.replace(/^https?:\/\//, '');
 	const url = `${protocol}://${host}/ws`;

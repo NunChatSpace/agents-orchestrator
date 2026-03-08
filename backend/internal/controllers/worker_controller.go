@@ -115,7 +115,7 @@ func (c *WorkerController) Delete(w http.ResponseWriter, r *http.Request) {
 	views.JSON(w, http.StatusNoContent, nil, rid)
 }
 
-// Update handles PATCH /workers/{worker_id} — updates cli_command.
+// Update handles PATCH /workers/{worker_id} — updates worker settings (cli_command, map_x, map_y).
 func (c *WorkerController) Update(w http.ResponseWriter, r *http.Request) {
 	rid := reqID(r)
 	workerID, err := uuid.Parse(mux.Vars(r)["worker_id"])

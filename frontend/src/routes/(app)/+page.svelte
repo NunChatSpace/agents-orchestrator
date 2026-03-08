@@ -1,13 +1,14 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { PUBLIC_WORKSPACES_PATH } from '$env/static/public';
 	import { allWorkers } from '../../stores/workers';
 	import { selectedGroup } from '../../stores/selectedGroup';
 	import type { Worker } from '../../types/worker';
 
+	const WORKSPACES_PATH = import.meta.env.WORKSPACES_PATH as string | undefined;
+
 	function toHostPath(containerPath: string): string {
-		if (!PUBLIC_WORKSPACES_PATH) return containerPath;
-		return containerPath.replace(/^\/workspaces/, PUBLIC_WORKSPACES_PATH);
+		if (!WORKSPACES_PATH) return containerPath;
+		return containerPath.replace(/^\/workspaces/, WORKSPACES_PATH);
 	}
 
 	$: groupWorkers = $allWorkers.filter((w) => w.group_name === $selectedGroup);

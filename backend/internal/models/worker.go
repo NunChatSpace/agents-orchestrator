@@ -16,8 +16,8 @@ const (
 )
 
 type Worker struct {
-	WorkerID     uuid.UUID    `db:"worker_id"`
-	GroupID      uuid.UUID    `db:"group_id"`
+	WorkerID uuid.UUID `db:"worker_id"`
+	GroupID  uuid.UUID `db:"group_id"`
 	// GroupName is populated by queries that JOIN with worker_groups.
 	GroupName    string       `db:"group_name"`
 	Name         string       `db:"name"`
@@ -26,6 +26,8 @@ type Worker struct {
 	Workspace    string       `db:"workspace"`
 	CLICommand   string       `db:"cli_command"`
 	GitRepoURL   string       `db:"git_repo_url"`
+	MapX         int          `db:"map_x"`
+	MapY         int          `db:"map_y"`
 	Status       WorkerStatus `db:"status"`
 	LastActiveAt *time.Time   `db:"last_active_at"`
 	CreatedAt    time.Time    `db:"created_at"`

@@ -623,7 +623,8 @@ WHERE search_vector @@ plainto_tsquery('english', $1);
 | Storage | MinIO / S3 |
 | Auth | HttpOnly session cookies |
 | DI | Uber dig |
-| Deploy | Docker, Kubernetes |
+| Deploy | Docker Compose (single exposed proxy port), Kubernetes |
+| Reverse Proxy | Nginx (routes `/` to frontend, `/api` and `/ws` to backend) |
 | UI Fonts | Inter, Space Grotesk (Google Fonts) |
 | UI Design System | NEXUS (dark cyber-premium theme, see spec §17.2) |
 | Markdown | `marked` (parse) + `DOMPurify` (sanitize) — chat bubbles and instruction blocks |
@@ -639,10 +640,18 @@ WHERE search_vector @@ plainto_tsquery('english', $1);
 | GET | `/api/v1/workers` | `WorkerController.List` | List all workers |
 | POST | `/api/v1/workers` | `WorkerController.Create` | Register worker |
 | GET | `/api/v1/workers/{worker_id}` | `WorkerController.Get` | Get single worker |
-| PATCH | `/api/v1/workers/{worker_id}` | `WorkerController.Update` | Update CLI command etc. |
+| PATCH | `/api/v1/workers/{worker_id}` | `WorkerController.Update` | Update worker settings (`cli_command`, `map_x`, `map_y`) |
 | DELETE | `/api/v1/workers/{worker_id}` | `WorkerController.Delete` | Remove worker |
 | POST | `/api/v1/workers/{worker_id}/ping` | `WorkerController.Ping` | Health check |
 | POST | `/api/v1/workers/{worker_id}/plan` | `WorkerController.Plan` | Run CLI in plan mode; returns `{ prompt: string }` |
+
+Worker response payloads include office placement fields:
+
+- `map_x` (integer tile coordinate, default `0`)
+- `map_y` (integer tile coordinate, default `0`)
+- `created_at` (used by frontend fallback desk ordering)
+
+Schema change: migration `008_worker_map_position.sql` adds `workers.map_x` and `workers.map_y`.
 
 ### API Endpoints — Plan Sessions
 
@@ -684,11 +693,42 @@ Key methods:
 | `/agents/[worker_id]/jobs` | `routes/(app)/agents/[worker_id]/jobs/+page.svelte` | Job list for a specific agent |
 | `/agents/[worker_id]/settings` | `routes/(app)/agents/[worker_id]/settings/+page.svelte` | Agent settings + health check |
 | `/plans` | `routes/(app)/plans/+page.svelte` | Plans page — discussion-first job creation |
+| `/office` | `routes/(app)/office/+page.svelte` | Canvas-based Office map with avatar movement + worker interaction panel |
 | `/jobs/[job_id]` | `routes/(app)/jobs/[job_id]/+page.svelte` | Job chat feed |
 
-Shared layout `routes/(app)/+layout.svelte` renders the persistent top bar (logo, workspace dropdown, Agents \| Plans nav) for all app routes.
+Shared layout `routes/(app)/+layout.svelte` renders the persistent top bar (logo, workspace dropdown, Agents \| Plans \| Office nav) for all app routes.
 
 Shared layout `routes/(app)/agents/[worker_id]/+layout.svelte` renders the agent header and Jobs \| Settings sub-nav for agent sub-pages.
+
+### Office Canvas Modules
+
+Office map rendering is split into small frontend modules under `frontend/src/lib/office/`:
+
+- `OfficeEngine.ts` — render loop, camera, movement, collision, proximity, interaction callbacks
+- `mapConfig.ts` — tile map + desk configuration + fallback desk resolution
+- `playerController.ts` — keyboard + virtual D-pad input state
+- `tileRenderer.ts` — floor/wall tile drawing
+- `npcRenderer.ts` — worker sprite/desk rendering + labels + hit-test
+- `proximityDetector.ts` — nearest in-range worker resolution
+
+Interaction UI is implemented in `frontend/src/components/organisms/OfficeInteractionPanel.svelte` and reuses existing job APIs (`POST /jobs`, `POST /jobs/{id}/submit`) without adding a new worker-jobs endpoint.
+
+### Deployment Networking (Compose)
+
+Local/LAN compose topology uses a single host-exposed port:
+
+- `proxy` (nginx) exposes `5174:80` on host
+- `frontend` has no host port mapping (internal only)
+- `backend` has no host port mapping (internal only)
+- `postgres` has no host port mapping (internal only)
+
+Routing:
+
+- browser `GET /` -> `proxy` -> `frontend:5173`
+- browser `GET/POST /api/*` -> `proxy` -> `backend:8080/api/*`
+- browser `WS /ws` -> `proxy` -> `backend:8080/ws`
+
+Frontend should keep `VITE_BACKEND_URL` empty in this mode so API calls resolve to same-origin `/api/v1`.
 
 ---
 

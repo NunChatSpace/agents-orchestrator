@@ -107,14 +107,16 @@ func (s *workerService) CreateWorker(ctx context.Context, req domains.CreateWork
 	apiKeyHash := hex.EncodeToString(hash[:])
 
 	worker := &models.Worker{
-		WorkerID:   uuid.New(),
-		GroupID:    groupID,
-		Name:       req.Name,
+		WorkerID:    uuid.New(),
+		GroupID:     groupID,
+		Name:        req.Name,
 		CallbackURL: "",
 		APIKeyHash:  apiKeyHash,
 		Workspace:   workspace,
 		CLICommand:  cliCommand,
 		GitRepoURL:  req.GitRepoURL,
+		MapX:        0,
+		MapY:        0,
 		Status:      models.WorkerStatusIdle,
 	}
 
@@ -123,15 +125,12 @@ func (s *workerService) CreateWorker(ctx context.Context, req domains.CreateWork
 		return nil, fmt.Errorf("save worker: %w", err)
 	}
 
-	return &domains.WorkerResponse{
-		WorkerID:   worker.WorkerID.String(),
-		GroupName:  req.GroupName,
-		Name:       worker.Name,
-		CLICommand: worker.CLICommand,
-		Workspace:  worker.Workspace,
-		GitRepoURL: worker.GitRepoURL,
-		Status:     string(worker.Status),
-	}, nil
+	saved, err := s.workerRepo.GetByID(ctx, worker.WorkerID)
+	if err != nil {
+		worker.GroupName = req.GroupName
+		return toWorkerResponse(worker), nil
+	}
+	return toWorkerResponse(saved), nil
 }
 
 func (s *workerService) UpdateWorker(ctx context.Context, workerID uuid.UUID, req domains.UpdateWorkerRequest) (*domains.WorkerResponse, error) {
@@ -150,15 +149,31 @@ func (s *workerService) UpdateWorker(ctx context.Context, workerID uuid.UUID, re
 		worker.CLICommand = *req.CLICommand
 	}
 
-	return &domains.WorkerResponse{
-		WorkerID:   worker.WorkerID.String(),
-		GroupName:  worker.GroupName,
-		Name:       worker.Name,
-		CLICommand: worker.CLICommand,
-		Workspace:  worker.Workspace,
-		GitRepoURL: worker.GitRepoURL,
-		Status:     string(worker.Status),
-	}, nil
+	if req.MapX != nil || req.MapY != nil {
+		mapX := worker.MapX
+		mapY := worker.MapY
+
+		if req.MapX != nil {
+			if *req.MapX < 0 {
+				return nil, errors.New("map_x must be >= 0")
+			}
+			mapX = *req.MapX
+		}
+		if req.MapY != nil {
+			if *req.MapY < 0 {
+				return nil, errors.New("map_y must be >= 0")
+			}
+			mapY = *req.MapY
+		}
+
+		if err := s.workerRepo.UpdateMapPosition(ctx, workerID, mapX, mapY); err != nil {
+			return nil, err
+		}
+		worker.MapX = mapX
+		worker.MapY = mapY
+	}
+
+	return toWorkerResponse(worker), nil
 }
 
 func (s *workerService) ListWorkers(ctx context.Context) ([]*domains.WorkerResponse, error) {
@@ -168,16 +183,7 @@ func (s *workerService) ListWorkers(ctx context.Context) ([]*domains.WorkerRespo
 	}
 	resp := make([]*domains.WorkerResponse, len(workers))
 	for i, w := range workers {
-		resp[i] = &domains.WorkerResponse{
-			WorkerID:     w.WorkerID.String(),
-			GroupName:    w.GroupName,
-			Name:         w.Name,
-			CLICommand:   w.CLICommand,
-			Workspace:    w.Workspace,
-			GitRepoURL:   w.GitRepoURL,
-			Status:       string(w.Status),
-			LastActiveAt: w.LastActiveAt,
-		}
+		resp[i] = toWorkerResponse(w)
 	}
 	return resp, nil
 }
@@ -187,16 +193,7 @@ func (s *workerService) GetWorker(ctx context.Context, workerID uuid.UUID) (*dom
 	if err != nil {
 		return nil, errors.New("worker not found")
 	}
-	return &domains.WorkerResponse{
-		WorkerID:     w.WorkerID.String(),
-		GroupName:    w.GroupName,
-		Name:         w.Name,
-		CLICommand:   w.CLICommand,
-		Workspace:    w.Workspace,
-		GitRepoURL:   w.GitRepoURL,
-		Status:       string(w.Status),
-		LastActiveAt: w.LastActiveAt,
-	}, nil
+	return toWorkerResponse(w), nil
 }
 
 func (s *workerService) DeleteWorker(ctx context.Context, workerID uuid.UUID) error {
@@ -229,4 +226,20 @@ func (s *workerService) PingWorker(ctx context.Context, workerID uuid.UUID) (*do
 		return &domains.PingWorkerResponse{OK: false, Output: output, Error: err.Error()}, nil
 	}
 	return &domains.PingWorkerResponse{OK: true, Output: output}, nil
+}
+
+func toWorkerResponse(w *models.Worker) *domains.WorkerResponse {
+	return &domains.WorkerResponse{
+		WorkerID:     w.WorkerID.String(),
+		GroupName:    w.GroupName,
+		Name:         w.Name,
+		CLICommand:   w.CLICommand,
+		Workspace:    w.Workspace,
+		GitRepoURL:   w.GitRepoURL,
+		MapX:         w.MapX,
+		MapY:         w.MapY,
+		Status:       string(w.Status),
+		LastActiveAt: w.LastActiveAt,
+		CreatedAt:    w.CreatedAt,
+	}
 }

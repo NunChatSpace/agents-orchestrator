@@ -29,6 +29,7 @@
 
 	$: agentsActive = $page.url.pathname === '/' || $page.url.pathname.startsWith('/agents');
 	$: plansActive = $page.url.pathname.startsWith('/plans');
+	$: officeActive = $page.url.pathname.startsWith('/office');
 </script>
 
 <div class="app-shell">
@@ -41,6 +42,7 @@
 			<nav class="top-nav">
 				<a class="nav-link" class:active={agentsActive} href="/">Agents</a>
 				<a class="nav-link" class:active={plansActive} href="/plans">Plans</a>
+				<a class="nav-link" class:active={officeActive} href="/office">Office</a>
 			</nav>
 			<div class="top-bar-right">
 				{#if groups.length > 0}

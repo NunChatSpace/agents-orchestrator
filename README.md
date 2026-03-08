@@ -6,9 +6,10 @@ A personal web app for managing AI worker agents. Create jobs, dispatch them to 
 
 ## Overview
 
-- **Backend** — Go API server, port `8080`, runs in Docker
-- **Frontend** — SvelteKit dev server, port `5173` (host), `5174` (Docker)
-- **Database** — PostgreSQL 16, port `5433` (host) → `5432` (container)
+- **Proxy (single entrypoint)** — Nginx on host port `5174`
+- **Frontend** — SvelteKit Node server inside Docker (internal only)
+- **Backend** — Go API server inside Docker (internal only)
+- **Database** — PostgreSQL 16 inside Docker (internal only)
 
 ---
 
@@ -40,37 +41,24 @@ Create a `.env` file in the project root. Docker Compose reads this file automat
 # Docker bind-mounts this to /workspaces inside the container.
 # The frontend also reads it (via Vite's PUBLIC_ prefix) to build
 # correct vscode://file/... deep links for each agent card.
-PUBLIC_WORKSPACES_PATH=/absolute/path/to/your/workspaces
+WORKSPACES_PATH=/absolute/path/to/your/workspaces
 ```
 
-### 2. Start backend and database
+### 2. Start all services
 
 ```bash
 docker compose up -d
 ```
 
 This starts:
-- `postgres` — database on port `5433`
-- `backend` — Go API on port `8080` (runs migrations automatically on start)
-- `frontend` — built SvelteKit app on port `5174` (optional, see step 3)
+- `proxy` — the only host-exposed service on `:5174`
+- `frontend` — internal web app server
+- `backend` — internal API server (runs migrations automatically on start)
+- `postgres` — internal database
 
-### 3. Run frontend in dev mode (recommended)
+### 3. Log in
 
-For hot-reload during development, run the frontend on the host instead:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Frontend will be available at `http://localhost:5173`.
-
-> The backend's `FRONTEND_ORIGIN` env var must match. It's set to `http://localhost:5174` in `docker-compose.yml` by default. Change it to `http://localhost:5173` if running frontend on the host.
-
-### 4. Log in
-
-Open `http://localhost:5173` (or `5174` if using Docker frontend).
+Open `http://localhost:5174` (or your LAN host like `http://192.168.1.172:5174`).
 
 Default credentials (set via `SEED_USERNAME` / `SEED_PASSWORD` in docker-compose):
 
@@ -160,7 +148,8 @@ All backend env vars are set in `docker-compose.yml`. Key ones:
 | `SEED_PASSWORD` | `changeme` | Admin password — **change in production** |
 | `PORT` | `8080` | Backend listen port |
 | `FRONTEND_ORIGIN` | `http://localhost:5174` | CORS allowed origin |
-| `PUBLIC_WORKSPACES_PATH` | — | **Required.** Host path bind-mounted to `/workspaces`; also used by the frontend for VSCode deep links |
+| `VITE_BACKEND_URL` | *(empty)* | Leave empty for same-origin `/api` via proxy. Set only if bypassing proxy. |
+| `WORKSPACES_PATH` | — | **Required.** Host path bind-mounted to `/workspaces`; also used by the frontend for VSCode deep links |
 
 ---
 
@@ -179,8 +168,8 @@ All backend env vars are set in `docker-compose.yml`. Key ones:
 # Start everything
 docker compose up -d
 
-# Rebuild backend after Go changes
-docker compose up -d --build backend
+# Rebuild app stack after config/frontend/backend changes
+docker compose up -d --build proxy frontend backend
 
 # View backend logs
 docker compose logs -f backend
@@ -190,9 +179,6 @@ docker compose down
 
 # Stop and remove volumes (wipes database)
 docker compose down -v
-
-# Frontend dev (hot reload)
-cd frontend && npm run dev
 
 # Frontend type check
 cd frontend && npm run check
