@@ -22,83 +22,81 @@
 	onMount(() => window.addEventListener('keydown', onKeyDown));
 	onDestroy(() => window.removeEventListener('keydown', onKeyDown));
 
+	function statusLabel(status: string): string {
+		return status.replace('_', ' ').toUpperCase();
+	}
+
 	function statusClass(status: string): string {
-		if (status === 'done') return 'ok';
-		if (status === 'failed' || status === 'cancelled') return 'fail';
-		if (status === 'pending_user') return 'wait';
+		if (status === 'idle') return 'idle';
 		if (status === 'busy' || status === 'assigned') return 'busy';
-		return 'idle';
+		if (status === 'pending_user') return 'pending_user';
+		return 'offline';
 	}
 
 	function relativeTime(iso: string): string {
 		const diff = Date.now() - new Date(iso).getTime();
-		const mins = Math.floor(diff / 60000);
-		if (mins < 1) return 'just now';
-		if (mins < 60) return `${mins}m ago`;
-		const hrs = Math.floor(mins / 60);
-		if (hrs < 24) return `${hrs}h ago`;
-		return `${Math.floor(hrs / 24)}d ago`;
+		const minutes = Math.floor(diff / 60000);
+		if (minutes < 1) return 'JUST NOW';
+		if (minutes < 60) return `${minutes}M AGO`;
+		const hours = Math.floor(minutes / 60);
+		if (hours < 24) return `${hours}H AGO`;
+		return `${Math.floor(hours / 24)}D AGO`;
 	}
 </script>
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
-<div class="panel-backdrop" on:click={(e) => e.target === e.currentTarget && dispatch('close')}>
-	<aside class="panel nx-card">
-		<header class="panel-header">
-			<div class="worker-name">{worker.name}</div>
-			<div class="worker-meta">
-				<span>{worker.group_name}</span>
-				<span class="dot">•</span>
-				<span class="mono">{worker.workspace}</span>
-			</div>
-			<div class="status-row">
-				<span class="status-pill {statusClass(worker.status)}">{worker.status}</span>
-				<button class="close-btn" on:click={() => dispatch('close')} aria-label="Close panel">×</button>
-			</div>
-		</header>
+<div class="panel-backdrop" on:click={(event) => event.target === event.currentTarget && dispatch('close')}>
+	<aside class="panel">
+		<button class="panel-close" on:click={() => dispatch('close')} aria-label="Close panel">✕</button>
 
-		<section class="section">
-			<div class="section-label">Active Job</div>
-			{#if activeJob}
-				<a class="job-item" href="/jobs/{activeJob.job_id}">
-					<div class="job-title">{activeJob.title || activeJob.prompt}</div>
-					<div class="job-sub">{activeJob.status}</div>
-				</a>
-			{:else}
-				<p class="empty-text">No active job right now.</p>
-			{/if}
-		</section>
+		<div class="panel-name">{worker.name.toUpperCase()}</div>
+		<div class="panel-group">{worker.group_name.toUpperCase()} · {worker.workspace}</div>
 
-		<section class="section">
-			<div class="section-label">Recent Jobs</div>
+		<div class="panel-label">STATUS</div>
+		<div class="panel-status {statusClass(worker.status)}">
+			<span class="dot"></span>
+			<span>{statusLabel(worker.status)}</span>
+		</div>
+
+		{#if activeJob}
+			<hr class="panel-divider" />
+			<div class="panel-label">ACTIVE JOB</div>
+			<a class="panel-job active" href="/jobs/{activeJob.job_id}">
+				<span>{activeJob.title || activeJob.prompt}</span>
+				<span class="job-status-pill {activeJob.status}">{activeJob.status}</span>
+			</a>
+		{/if}
+
+		<hr class="panel-divider" />
+		<div class="panel-label">RECENT JOBS</div>
+		<div class="panel-jobs">
 			{#if recentJobs.length > 0}
-				<div class="recent-list">
-					{#each recentJobs as job (job.job_id)}
-						<a class="job-item" href="/jobs/{job.job_id}">
-							<div class="job-title">{job.title || job.prompt}</div>
-							<div class="job-sub">{job.status} · {relativeTime(job.updated_at)}</div>
-						</a>
-					{/each}
-				</div>
+				{#each recentJobs as job (job.job_id)}
+					<a class="panel-job" href="/jobs/{job.job_id}">
+						<span class="job-title">{job.title || job.prompt}</span>
+						<span class="job-meta">
+							<span>{relativeTime(job.updated_at)}</span>
+							<span class="job-status-pill {job.status}">{job.status}</span>
+						</span>
+					</a>
+				{/each}
 			{:else}
-				<p class="empty-text">No recent jobs.</p>
+				<div class="empty-state">NO JOB HISTORY AVAILABLE</div>
 			{/if}
-		</section>
+		</div>
 
-		<section class="section">
-			<div class="section-label">Actions</div>
-			<div class="actions">
-				<button class="action-btn primary" on:click={() => dispatch('newjob')}>New Job →</button>
-				<button class="action-btn" on:click={() => dispatch('viewjobs')}>View All Jobs →</button>
-				<button class="action-btn" on:click={() => dispatch('settings')}>Settings →</button>
+		<div class="panel-btns">
+			<button class="panel-btn primary" on:click={() => dispatch('newjob')}>⊕ NEW JOB →</button>
+			<button class="panel-btn secondary" on:click={() => dispatch('viewjobs')}>VIEW ALL JOBS</button>
+			<button class="panel-btn secondary" on:click={() => dispatch('settings')}>SETTINGS</button>
+		</div>
+
+		{#if createdJobId}
+			<div class="created-notice">
+				JOB CREATED <a href="/jobs/{createdJobId}">OPEN CHAT</a>
 			</div>
-			{#if createdJobId}
-				<div class="created-notice">
-					Job created. <a href="/jobs/{createdJobId}">Open chat</a>
-				</div>
-			{/if}
-		</section>
+		{/if}
 	</aside>
 </div>
 
@@ -106,200 +104,277 @@
 	.panel-backdrop {
 		position: fixed;
 		inset: 48px 0 0 0;
-		background: rgba(0,0,0,0.26);
-		backdrop-filter: blur(4px);
 		display: flex;
 		justify-content: flex-end;
+		background: rgba(0, 0, 0, 0);
 		z-index: 70;
 	}
 
 	.panel {
-		width: min(420px, 100vw);
-		height: calc(100vh - 48px);
-		border-radius: 0;
-		border-left: 1px solid rgba(139,92,246,0.28);
-		animation: slide-in 180ms ease-out;
-		padding: 18px;
+		position: relative;
+		width: min(320px, calc(100vw - 24px));
+		height: fit-content;
+		max-height: calc(100vh - 84px);
+		margin: 20px;
+		padding: 20px;
 		overflow-y: auto;
+		background: rgba(3, 2, 10, 0.92);
+		border: 1px solid rgba(0, 240, 255, 0.3);
+		clip-path: polygon(16px 0%, 100% 0%, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0% 100%, 0% 16px);
+		box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+		animation: panel-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
 	}
 
-	@keyframes slide-in {
-		from { transform: translateX(24px); opacity: 0; }
-		to { transform: translateX(0); opacity: 1; }
+	@keyframes panel-in {
+		from {
+			transform: translateX(28px);
+			opacity: 0;
+		}
+		to {
+			transform: translateX(0);
+			opacity: 1;
+		}
 	}
 
-	.panel-header {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		padding-bottom: 12px;
-		border-bottom: 1px solid rgba(139,92,246,0.14);
+	.panel-close {
+		position: absolute;
+		top: 14px;
+		right: 14px;
+		border: none;
+		background: none;
+		color: rgba(0, 240, 255, 0.35);
+		font-size: 14px;
+		font-family: 'Courier New', monospace;
+		cursor: pointer;
+		transition: color 0.2s;
 	}
 
-	.worker-name {
-		font-family: 'Space Grotesk', sans-serif;
-		font-size: 20px;
+	.panel-close:hover {
+		color: #00f0ff;
+	}
+
+	.panel-name {
+		margin-bottom: 4px;
+		font-size: 14px;
 		font-weight: 700;
-		color: #efe8ff;
+		letter-spacing: 0.12em;
+		color: #00f0ff;
+		text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
 	}
 
-	.worker-meta {
-		display: flex;
+	.panel-group {
+		margin-bottom: 14px;
+		font-size: 10px;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: rgba(255, 42, 109, 0.7);
+		word-break: break-word;
+	}
+
+	.panel-label {
+		margin-bottom: 4px;
+		font-size: 9px;
+		letter-spacing: 0.15em;
+		text-transform: uppercase;
+		color: rgba(0, 240, 255, 0.35);
+	}
+
+	.panel-status {
+		display: inline-flex;
 		align-items: center;
 		gap: 6px;
-		font-size: 11px;
-		color: rgba(196,181,253,0.6);
-	}
-
-	.mono {
-		font-family: 'SFMono-Regular', Consolas, monospace;
+		margin-bottom: 10px;
+		padding: 3px 10px;
+		border: 1px solid;
 		font-size: 10px;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
 	}
 
-	.dot { opacity: 0.5; }
-
-	.status-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		margin-top: 2px;
-	}
-
-	.status-pill {
-		padding: 3px 8px;
+	.panel-status .dot {
+		width: 6px;
+		height: 6px;
 		border-radius: 999px;
-		font-size: 11px;
-		text-transform: lowercase;
-		border: 1px solid transparent;
+		background: currentColor;
 	}
 
-	.status-pill.ok {
-		background: rgba(74,222,128,0.12);
-		border-color: rgba(74,222,128,0.28);
-		color: #4ade80;
+	.panel-status.idle {
+		border-color: rgba(0, 255, 136, 0.4);
+		color: #00ff88;
 	}
 
-	.status-pill.fail {
-		background: rgba(248,113,113,0.12);
-		border-color: rgba(248,113,113,0.28);
-		color: #f87171;
+	.panel-status.busy {
+		border-color: rgba(255, 160, 0, 0.4);
+		color: #ffa000;
 	}
 
-	.status-pill.busy {
-		background: rgba(251,146,60,0.12);
-		border-color: rgba(251,146,60,0.28);
-		color: #fb923c;
-	}
-
-	.status-pill.wait {
-		background: rgba(96,165,250,0.12);
-		border-color: rgba(96,165,250,0.28);
+	.panel-status.pending_user {
+		border-color: rgba(96, 165, 250, 0.4);
 		color: #60a5fa;
 	}
 
-	.status-pill.idle {
-		background: rgba(139,92,246,0.12);
-		border-color: rgba(139,92,246,0.26);
-		color: #c4b5fd;
+	.panel-status.offline {
+		border-color: rgba(100, 100, 100, 0.4);
+		color: #666666;
 	}
 
-	.close-btn {
-		width: 28px;
-		height: 28px;
-		border-radius: 8px;
-		border: 1px solid rgba(139,92,246,0.24);
-		background: rgba(139,92,246,0.08);
-		color: #c4b5fd;
-		cursor: pointer;
-		font-size: 18px;
-		line-height: 1;
+	.panel-divider {
+		margin: 14px 0;
+		border: none;
+		border-top: 1px solid rgba(0, 240, 255, 0.08);
 	}
 
-	.section {
+	.panel-jobs {
 		display: flex;
 		flex-direction: column;
+		gap: 6px;
+		margin-bottom: 16px;
+	}
+
+	.panel-job {
+		display: flex;
+		justify-content: space-between;
 		gap: 10px;
-		padding-top: 14px;
-	}
-
-	.section-label {
-		font-size: 11px;
-		letter-spacing: 0.1em;
-		text-transform: uppercase;
-		color: rgba(196,181,253,0.46);
-	}
-
-	.empty-text {
-		font-size: 12px;
-		color: rgba(196,181,253,0.45);
-	}
-
-	.recent-list {
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-	}
-
-	.job-item {
-		display: block;
-		padding: 10px 11px;
-		border-radius: 10px;
-		background: rgba(13,13,30,0.7);
-		border: 1px solid rgba(139,92,246,0.18);
+		padding: 7px 10px;
+		border: 1px solid rgba(0, 240, 255, 0.1);
+		background: rgba(0, 240, 255, 0.03);
+		color: rgba(220, 225, 255, 0.68);
+		font-size: 10px;
+		letter-spacing: 0.05em;
 		text-decoration: none;
 	}
 
-	.job-item:hover {
-		border-color: rgba(139,92,246,0.35);
+	.panel-job.active {
+		border-color: rgba(255, 42, 109, 0.25);
+		background: rgba(255, 42, 109, 0.05);
 	}
 
 	.job-title {
-		font-size: 12.5px;
-		color: #e9ddff;
-		white-space: nowrap;
+		flex: 1;
+		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
-	.job-sub {
-		margin-top: 3px;
-		font-size: 11px;
-		color: rgba(196,181,253,0.55);
+	.job-meta {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		flex-shrink: 0;
 	}
 
-	.actions {
+	.empty-state {
+		padding: 8px 10px;
+		border: 1px solid rgba(0, 240, 255, 0.1);
+		background: rgba(0, 240, 255, 0.03);
+		font-size: 10px;
+		letter-spacing: 0.08em;
+		color: rgba(200, 200, 255, 0.5);
+	}
+
+	.job-status-pill {
+		padding: 2px 6px;
+		font-size: 9px;
+		border-radius: 2px;
+		text-transform: uppercase;
+	}
+
+	.job-status-pill.done {
+		background: rgba(0, 255, 136, 0.15);
+		color: #00ff88;
+	}
+
+	.job-status-pill.busy,
+	.job-status-pill.assigned {
+		background: rgba(255, 160, 0, 0.15);
+		color: #ffa000;
+	}
+
+	.job-status-pill.pending_user {
+		background: rgba(96, 165, 250, 0.15);
+		color: #60a5fa;
+	}
+
+	.job-status-pill.queued,
+	.job-status-pill.draft {
+		background: rgba(0, 240, 255, 0.15);
+		color: #00f0ff;
+	}
+
+	.job-status-pill.failed,
+	.job-status-pill.cancelled {
+		background: rgba(255, 42, 109, 0.15);
+		color: #ff6a96;
+	}
+
+	.panel-btns {
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: 6px;
 	}
 
-	.action-btn {
-		width: 100%;
-		text-align: left;
-		padding: 9px 11px;
-		border-radius: 9px;
-		border: 1px solid rgba(139,92,246,0.22);
-		background: rgba(13,13,30,0.7);
-		color: rgba(196,181,253,0.88);
-		font-size: 12.5px;
+	.panel-btn {
+		padding: 8px 14px;
+		border: 1px solid;
+		background: transparent;
+		font-family: 'Courier New', monospace;
+		font-size: 10px;
+		letter-spacing: 0.15em;
+		text-transform: uppercase;
 		cursor: pointer;
+		transition: all 0.2s;
+		clip-path: polygon(8px 0%, 100% 0%, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0% 100%, 0% 8px);
 	}
 
-	.action-btn.primary {
-		background: linear-gradient(135deg, rgba(124,58,237,0.26), rgba(109,40,217,0.2));
-		border-color: rgba(139,92,246,0.4);
-		color: #efe8ff;
+	.panel-btn.primary {
+		border-color: rgba(255, 42, 109, 0.5);
+		color: #ff2a6d;
+	}
+
+	.panel-btn.primary:hover {
+		background: rgba(255, 42, 109, 0.1);
+		box-shadow: 0 0 12px rgba(255, 42, 109, 0.3);
+		color: #ff6a96;
+	}
+
+	.panel-btn.secondary {
+		border-color: rgba(0, 240, 255, 0.25);
+		color: rgba(0, 240, 255, 0.5);
+	}
+
+	.panel-btn.secondary:hover {
+		background: rgba(0, 240, 255, 0.05);
+		border-color: rgba(0, 240, 255, 0.5);
+		color: #00f0ff;
 	}
 
 	.created-notice {
-		margin-top: 6px;
-		font-size: 12px;
-		color: #86efac;
+		margin-top: 12px;
+		font-size: 10px;
+		letter-spacing: 0.1em;
+		color: rgba(0, 255, 136, 0.78);
 	}
 
 	.created-notice a {
-		color: #c4b5fd;
+		color: #00f0ff;
+		text-decoration: none;
+	}
+
+	.created-notice a:hover {
 		text-decoration: underline;
 	}
-</style>
 
+	@media (max-width: 700px) {
+		.panel-backdrop {
+			inset: 48px 0 0 0;
+			align-items: flex-start;
+		}
+
+		.panel {
+			width: calc(100vw - 20px);
+			margin: 10px;
+			max-height: calc(100vh - 68px);
+		}
+	}
+</style>

@@ -66,7 +66,7 @@ func (d *dispatcherService) SendToWorker(ctx context.Context, workerID uuid.UUID
 	if job.ResumeID != nil {
 		resumeID = *job.ResumeID
 	}
-	go d.runCLI(worker, job.JobID, resumeID, job.Prompt)
+	go d.runCLI(worker, job.JobID, resumeID, models.WorkerInstructionFieldJob, job.Prompt)
 	return nil
 }
 
@@ -77,7 +77,7 @@ func (d *dispatcherService) NotifyUserReply(ctx context.Context, workerID uuid.U
 	if err != nil {
 		return fmt.Errorf("get worker: %w", err)
 	}
-	go d.runCLI(worker, jobID, resumeID, message)
+	go d.runCLI(worker, jobID, resumeID, models.WorkerInstructionFieldJob, message)
 	return nil
 }
 
@@ -94,8 +94,25 @@ func (d *dispatcherService) CancelWorkerJob(ctx context.Context, workerID uuid.U
 }
 
 // runCLI executes the CLI agent, streams thinking steps, and calls back with the final result.
-func (d *dispatcherService) runCLI(worker *models.Worker, jobID uuid.UUID, resumeID, instruction string) {
+func (d *dispatcherService) runCLI(worker *models.Worker, jobID uuid.UUID, resumeID string, field models.WorkerInstructionField, message string) {
 	jobKey := jobID.String()
+
+	instruction, err := composeWorkerInstruction(worker, field, message)
+	if err != nil {
+		log.Error().Err(err).Str("job", jobKey).Msg("compose instruction failed")
+		h := d.getHandler()
+		if h != nil {
+			req := domains.WorkerReplyRequest{
+				JobID:     jobKey,
+				WorkerID:  worker.WorkerID.String(),
+				Status:    "offline",
+				Message:   err.Error(),
+				UpdatedAt: time.Now().UTC(),
+			}
+			_ = h.HandleWorkerReply(context.Background(), req)
+		}
+		return
+	}
 
 	cliCmd := worker.CLICommand
 	if cliCmd == "" {
@@ -358,10 +375,14 @@ func truncateBytes(b []byte, max int) string {
 
 // RunPlanStream runs the worker's CLI and streams the reply via SSE to w.
 // It returns the full reply text and the new resume_id so the caller can persist them.
-func (d *dispatcherService) RunPlanStream(ctx context.Context, w http.ResponseWriter, workerID uuid.UUID, resumeID string, message string) (string, string, error) {
+func (d *dispatcherService) RunPlanStream(ctx context.Context, w http.ResponseWriter, workerID uuid.UUID, resumeID string, field models.WorkerInstructionField, message string) (string, string, error) {
 	worker, err := d.workerRepo.GetByID(ctx, workerID)
 	if err != nil {
 		return "", "", fmt.Errorf("get worker: %w", err)
+	}
+	instruction, err := composeWorkerInstruction(worker, field, message)
+	if err != nil {
+		return "", "", err
 	}
 
 	cliCmd := worker.CLICommand
@@ -376,12 +397,12 @@ func (d *dispatcherService) RunPlanStream(ctx context.Context, w http.ResponseWr
 		if resumeID != "" {
 			args = append(args, "--resume", resumeID)
 		}
-		args = append(args, message, "--output-format", "stream-json")
+		args = append(args, instruction, "--output-format", "stream-json")
 	} else {
 		if resumeID != "" {
-			args = []string{"exec", "resume", resumeID, "--dangerously-bypass-approvals-and-sandbox", "--json", "--skip-git-repo-check", message}
+			args = []string{"exec", "resume", resumeID, "--dangerously-bypass-approvals-and-sandbox", "--json", "--skip-git-repo-check", instruction}
 		} else {
-			args = []string{"exec", "--dangerously-bypass-approvals-and-sandbox", "--json", "--skip-git-repo-check", message}
+			args = []string{"exec", "--dangerously-bypass-approvals-and-sandbox", "--json", "--skip-git-repo-check", instruction}
 		}
 	}
 
@@ -509,7 +530,10 @@ func (d *dispatcherService) RunPlan(ctx context.Context, workerID uuid.UUID, tas
 	}
 	isClaude := cliCmd == "claude"
 
-	instruction := "Please write a clear, detailed task prompt for the following goal. Output ONLY the prompt text:\n\n" + task
+	instruction, err := composeWorkerInstruction(worker, models.WorkerInstructionFieldPlan, "Please write a clear, detailed task prompt for the following goal. Output ONLY the prompt text:\n\n"+task)
+	if err != nil {
+		return "", err
+	}
 
 	var args []string
 	if isClaude {

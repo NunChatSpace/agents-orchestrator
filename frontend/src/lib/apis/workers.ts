@@ -11,6 +11,11 @@ export const createWorker = (payload: CreateWorkerPayload) =>
 export const updateWorker = (workerId: string, payload: UpdateWorkerPayload) =>
 	PATCH<Worker>(`/workers/${workerId}`, payload);
 
+export const resetWorkerInstruction = (
+	workerId: string,
+	field: 'job' | 'plan' | 'discuss'
+) => POST<Worker>(`/workers/${workerId}/instructions/reset/${field}`, {});
+
 export const pingWorker = (workerId: string) =>
 	POST<PingResult>(`/workers/${workerId}/ping`, {});
 

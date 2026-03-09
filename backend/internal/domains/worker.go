@@ -14,17 +14,20 @@ type WorkerReplyRequest struct {
 
 // WorkerResponse is the API representation of a worker.
 type WorkerResponse struct {
-	WorkerID     string     `json:"worker_id"`
-	GroupName    string     `json:"group_name"`
-	Name         string     `json:"name"`
-	CLICommand   string     `json:"cli_command"`
-	Workspace    string     `json:"workspace"`
-	GitRepoURL   string     `json:"git_repo_url"`
-	MapX         int        `json:"map_x"`
-	MapY         int        `json:"map_y"`
-	Status       string     `json:"status"`
-	LastActiveAt *time.Time `json:"last_active_at,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
+	WorkerID           string     `json:"worker_id"`
+	GroupName          string     `json:"group_name"`
+	Name               string     `json:"name"`
+	CLICommand         string     `json:"cli_command"`
+	Workspace          string     `json:"workspace"`
+	GitRepoURL         string     `json:"git_repo_url"`
+	InstructionJob     string     `json:"instruction_job"`
+	InstructionPlan    string     `json:"instruction_plan"`
+	InstructionDiscuss string     `json:"instruction_discuss"`
+	MapX               int        `json:"map_x"`
+	MapY               int        `json:"map_y"`
+	Status             string     `json:"status"`
+	LastActiveAt       *time.Time `json:"last_active_at,omitempty"`
+	CreatedAt          time.Time  `json:"created_at"`
 }
 
 // CreateWorkerRequest is the payload to POST /api/v1/workers.
@@ -37,9 +40,12 @@ type CreateWorkerRequest struct {
 
 // UpdateWorkerRequest is the payload to PATCH /api/v1/workers/{worker_id}.
 type UpdateWorkerRequest struct {
-	CLICommand *string `json:"cli_command,omitempty"`
-	MapX       *int    `json:"map_x,omitempty"`
-	MapY       *int    `json:"map_y,omitempty"`
+	CLICommand         *string `json:"cli_command,omitempty"`
+	MapX               *int    `json:"map_x,omitempty"`
+	MapY               *int    `json:"map_y,omitempty"`
+	InstructionJob     *string `json:"instruction_job,omitempty"`
+	InstructionPlan    *string `json:"instruction_plan,omitempty"`
+	InstructionDiscuss *string `json:"instruction_discuss,omitempty"`
 }
 
 // PingWorkerResponse is returned by POST /api/v1/workers/{worker_id}/ping.

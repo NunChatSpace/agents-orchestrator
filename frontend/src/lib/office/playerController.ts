@@ -19,8 +19,19 @@ export class PlayerController {
 	private pressed = new Set<DirectionKey>();
 	private virtualPressed = new Set<DirectionKey>();
 	private active = false;
+	private enabled = true;
+
+	private isTypingTarget(target: EventTarget | null): boolean {
+		return (
+			target instanceof HTMLInputElement ||
+			target instanceof HTMLTextAreaElement ||
+			target instanceof HTMLSelectElement ||
+			(target instanceof HTMLElement && target.isContentEditable)
+		);
+	}
 
 	private onKeyDown = (event: KeyboardEvent) => {
+		if (!this.enabled || this.isTypingTarget(event.target)) return;
 		const direction = KEY_TO_DIRECTION[event.key];
 		if (!direction) return;
 		event.preventDefault();
@@ -28,6 +39,7 @@ export class PlayerController {
 	};
 
 	private onKeyUp = (event: KeyboardEvent) => {
+		if (this.isTypingTarget(event.target)) return;
 		const direction = KEY_TO_DIRECTION[event.key];
 		if (!direction) return;
 		event.preventDefault();
@@ -51,6 +63,7 @@ export class PlayerController {
 	}
 
 	setVirtualDirection(direction: DirectionKey, active: boolean) {
+		if (!this.enabled) return;
 		if (active) {
 			this.virtualPressed.add(direction);
 			return;
@@ -58,7 +71,19 @@ export class PlayerController {
 		this.virtualPressed.delete(direction);
 	}
 
+	setEnabled(enabled: boolean) {
+		this.enabled = enabled;
+		if (!enabled) {
+			this.pressed.clear();
+			this.virtualPressed.clear();
+		}
+	}
+
 	getVector(): { x: number; y: number } {
+		if (!this.enabled) {
+			return { x: 0, y: 0 };
+		}
+
 		const active = new Set<DirectionKey>([...this.pressed, ...this.virtualPressed]);
 		let x = 0;
 		let y = 0;
@@ -68,15 +93,16 @@ export class PlayerController {
 		if (active.has('up')) y -= 1;
 		if (active.has('down')) y += 1;
 
-		if (x !== 0 && y !== 0) {
-			const inv = Math.SQRT1_2;
-			x *= inv;
-			y *= inv;
+		const length = Math.hypot(x, y);
+		if (length === 0) {
+			return { x: 0, y: 0 };
 		}
 
-		return { x, y };
+		return {
+			x: x / length,
+			y: y / length
+		};
 	}
 }
 
 export type VirtualDirection = 'up' | 'down' | 'left' | 'right';
-

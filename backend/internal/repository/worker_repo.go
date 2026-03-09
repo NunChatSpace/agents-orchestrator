@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"strconv"
+	"strings"
 
 	"github.com/chatchawan/agent-orchestrator/internal/models"
 	"github.com/google/uuid"
@@ -102,10 +104,12 @@ func (r *workerRepo) GetOrCreateGroup(ctx context.Context, groupName string) (uu
 func (r *workerRepo) CreateWorker(ctx context.Context, worker *models.Worker) error {
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO workers
-		  (worker_id, group_id, name, callback_url, api_key_hash, workspace, cli_command, git_repo_url, map_x, map_y, status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		  (worker_id, group_id, name, callback_url, api_key_hash, workspace, cli_command, git_repo_url, instruction_job, instruction_plan, instruction_discuss, map_x, map_y, status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
 		worker.WorkerID, worker.GroupID, worker.Name, worker.CallbackURL,
-		worker.APIKeyHash, worker.Workspace, worker.CLICommand, worker.GitRepoURL, worker.MapX, worker.MapY, worker.Status)
+		worker.APIKeyHash, worker.Workspace, worker.CLICommand, worker.GitRepoURL,
+		worker.InstructionJob, worker.InstructionPlan, worker.InstructionDiscuss,
+		worker.MapX, worker.MapY, worker.Status)
 	return err
 }
 
@@ -121,8 +125,42 @@ func (r *workerRepo) UpdateMapPosition(ctx context.Context, workerID uuid.UUID, 
 	return err
 }
 
+func (r *workerRepo) UpdateInstructionFields(ctx context.Context, workerID uuid.UUID, patch WorkerInstructionPatch) error {
+	setParts := make([]string, 0, 3)
+	args := make([]any, 0, 4)
+	idx := 1
+
+	if patch.HasInstructionJob {
+		setParts = append(setParts, "instruction_job = $"+itoa(idx))
+		args = append(args, patch.InstructionJob)
+		idx++
+	}
+	if patch.HasInstructionPlan {
+		setParts = append(setParts, "instruction_plan = $"+itoa(idx))
+		args = append(args, patch.InstructionPlan)
+		idx++
+	}
+	if patch.HasInstructionDiscuss {
+		setParts = append(setParts, "instruction_discuss = $"+itoa(idx))
+		args = append(args, patch.InstructionDiscuss)
+		idx++
+	}
+	if len(setParts) == 0 {
+		return nil
+	}
+
+	args = append(args, workerID)
+	query := `UPDATE workers SET ` + strings.Join(setParts, ", ") + ` WHERE worker_id = $` + itoa(idx)
+	_, err := r.db.ExecContext(ctx, query, args...)
+	return err
+}
+
 func (r *workerRepo) DeleteWorker(ctx context.Context, workerID uuid.UUID) error {
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE workers SET deleted_at=NOW() WHERE worker_id=$1 AND deleted_at IS NULL`, workerID)
 	return err
+}
+
+func itoa(value int) string {
+	return strconv.Itoa(value)
 }

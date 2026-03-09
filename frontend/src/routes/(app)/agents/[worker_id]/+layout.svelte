@@ -29,8 +29,8 @@
 		if (!worker || !confirm(`Remove agent "${worker.name}"? This cannot be undone.`)) return;
 		deleting = true;
 		try {
-			await deleteWorker(workerId);
-			removeWorker(workerId);
+			await deleteWorker(currentId);
+			removeWorker(currentId);
 			selectedWorker.set(null);
 			goto('/');
 		} catch {

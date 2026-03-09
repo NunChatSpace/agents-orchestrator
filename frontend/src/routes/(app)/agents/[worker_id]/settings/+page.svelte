@@ -1,8 +1,24 @@
 <script lang="ts">
-	import { pingWorker, updateWorker } from '../../../../../lib/apis/workers';
+	import {
+		pingWorker,
+		resetWorkerInstruction,
+		updateWorker
+	} from '../../../../../lib/apis/workers';
 	import { selectedWorker } from '../../../../../stores/selectedWorker';
 	import { upsertWorker } from '../../../../../stores/workers';
-	import type { PingResult } from '../../../../../types/worker';
+	import type { PingResult, Worker } from '../../../../../types/worker';
+
+	type InstructionField = 'job' | 'plan' | 'discuss';
+
+	const instructionSections: Array<{
+		key: InstructionField;
+		label: string;
+		scope: string;
+	}> = [
+		{ key: 'job', label: 'Job', scope: 'job submit and follow-up turns' },
+		{ key: 'plan', label: 'Plan', scope: 'Generate Plan and prompt-generation runs' },
+		{ key: 'discuss', label: 'Discuss', scope: 'plan discussion messages' }
+	];
 
 	let pinging = false;
 	let pingResult: PingResult | null = null;
@@ -12,6 +28,26 @@
 	let positionError = '';
 	let positionMessage = '';
 	let positionWorkerId = '';
+	let workerDrafts: Record<InstructionField, string> = {
+		job: '',
+		plan: '',
+		discuss: ''
+	};
+	let workerSaving: Record<InstructionField, boolean> = {
+		job: false,
+		plan: false,
+		discuss: false
+	};
+	let workerMessages: Record<InstructionField, string> = {
+		job: '',
+		plan: '',
+		discuss: ''
+	};
+	let workerErrors: Record<InstructionField, string> = {
+		job: '',
+		plan: '',
+		discuss: ''
+	};
 
 	$: if ($selectedWorker && $selectedWorker.worker_id !== positionWorkerId) {
 		positionWorkerId = $selectedWorker.worker_id;
@@ -19,6 +55,9 @@
 		mapY = String($selectedWorker.map_y ?? 0);
 		positionError = '';
 		positionMessage = '';
+		workerDrafts = workerToDrafts($selectedWorker);
+		workerMessages = emptyFieldMessages();
+		workerErrors = emptyFieldMessages();
 	}
 
 	function relativeTime(iso: string): string {
@@ -73,6 +112,66 @@
 		} finally {
 			savingPosition = false;
 		}
+	}
+
+	async function saveWorkerInstruction(field: InstructionField) {
+		if (!$selectedWorker) return;
+		workerSaving = { ...workerSaving, [field]: true };
+		workerErrors = { ...workerErrors, [field]: '' };
+		workerMessages = { ...workerMessages, [field]: '' };
+		try {
+			const updated = await updateWorker($selectedWorker.worker_id, workerPayload(field, workerDrafts[field]));
+			selectedWorker.set(updated);
+			upsertWorker(updated);
+			workerDrafts = workerToDrafts(updated);
+			workerMessages = { ...workerMessages, [field]: 'Instruction saved' };
+		} catch (e: unknown) {
+			workerErrors = {
+				...workerErrors,
+				[field]: e instanceof Error ? e.message : 'Failed to save instruction'
+			};
+		} finally {
+			workerSaving = { ...workerSaving, [field]: false };
+		}
+	}
+
+	async function resetInstruction(field: InstructionField) {
+		if (!$selectedWorker) return;
+		workerSaving = { ...workerSaving, [field]: true };
+		workerErrors = { ...workerErrors, [field]: '' };
+		workerMessages = { ...workerMessages, [field]: '' };
+		try {
+			const updated = await resetWorkerInstruction($selectedWorker.worker_id, field);
+			selectedWorker.set(updated);
+			upsertWorker(updated);
+			workerDrafts = workerToDrafts(updated);
+			workerMessages = { ...workerMessages, [field]: 'Factory default restored' };
+		} catch (e: unknown) {
+			workerErrors = {
+				...workerErrors,
+				[field]: e instanceof Error ? e.message : 'Failed to reset instruction'
+			};
+		} finally {
+			workerSaving = { ...workerSaving, [field]: false };
+		}
+	}
+
+	function emptyFieldMessages(): Record<InstructionField, string> {
+		return { job: '', plan: '', discuss: '' };
+	}
+
+	function workerToDrafts(worker: Worker): Record<InstructionField, string> {
+		return {
+			job: worker.instruction_job ?? '',
+			plan: worker.instruction_plan ?? '',
+			discuss: worker.instruction_discuss ?? ''
+		};
+	}
+
+	function workerPayload(field: InstructionField, value: string) {
+		if (field === 'job') return { instruction_job: value };
+		if (field === 'plan') return { instruction_plan: value };
+		return { instruction_discuss: value };
 	}
 </script>
 
@@ -194,6 +293,59 @@
 				<p class="ping-hint">Runs <code>{$selectedWorker.cli_command} --version</code> inside the agent's workspace to verify the CLI is installed and reachable.</p>
 			{/if}
 		</div>
+
+		<div class="section">
+			<div class="section-header">
+				<div class="section-title">
+					<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path d="M4 5h16M4 12h16M4 19h16"/>
+					</svg>
+					Agent Instructions
+				</div>
+			</div>
+
+			<div class="instruction-grid">
+				{#each instructionSections as section}
+					<div class="instruction-card">
+						<div class="instruction-header">
+							<div>
+								<div class="info-label">{section.label}</div>
+								<p class="instruction-help">Applies to {section.scope}.</p>
+							</div>
+						</div>
+						<textarea
+							class="nx-input instruction-textarea"
+							bind:value={workerDrafts[section.key]}
+							rows="7"
+							placeholder={`${section.label} instruction`}
+						></textarea>
+						{#if workerErrors[section.key]}
+							<p class="position-error">{workerErrors[section.key]}</p>
+						{:else if workerMessages[section.key]}
+							<p class="position-ok">{workerMessages[section.key]}</p>
+						{:else}
+							<p class="instruction-help">Saved on this agent only. Factory Reset restores the backend default for this field.</p>
+						{/if}
+						<div class="instruction-actions">
+							<button
+								class="ping-btn"
+								on:click={() => saveWorkerInstruction(section.key)}
+								disabled={workerSaving[section.key]}
+							>
+								{workerSaving[section.key] ? 'Saving…' : 'Save'}
+							</button>
+							<button
+								class="secondary-btn"
+								on:click={() => resetInstruction(section.key)}
+								disabled={workerSaving[section.key]}
+							>
+								Factory Reset
+							</button>
+						</div>
+					</div>
+				{/each}
+			</div>
+		</div>
 	</div>
 {/if}
 
@@ -285,6 +437,47 @@
 		color: #4ade80;
 	}
 
+	.instruction-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+		gap: 12px;
+	}
+
+	.instruction-card {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		padding: 14px;
+		border-radius: 10px;
+		background: rgba(10,10,22,0.5);
+		border: 1px solid rgba(139,92,246,0.12);
+	}
+
+	.instruction-header {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 12px;
+	}
+
+	.instruction-help {
+		font-size: 11.5px;
+		color: rgba(196,181,253,0.38);
+		line-height: 1.55;
+	}
+
+	.instruction-textarea {
+		min-height: 150px;
+		resize: vertical;
+		line-height: 1.55;
+	}
+
+	.instruction-actions {
+		display: flex;
+		gap: 8px;
+		flex-wrap: wrap;
+	}
+
 	.ping-btn {
 		display: inline-flex;
 		align-items: center;
@@ -301,6 +494,31 @@
 		transition: opacity 0.2s;
 	}
 	.ping-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+	.secondary-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 6px 13px;
+		border-radius: 7px;
+		background: transparent;
+		color: #a78bfa;
+		font-size: 11.5px;
+		font-weight: 500;
+		border: 1px solid rgba(139,92,246,0.3);
+		cursor: pointer;
+		font-family: inherit;
+		transition: opacity 0.2s, background 0.2s;
+	}
+
+	.secondary-btn:hover:not(:disabled) {
+		background: rgba(139,92,246,0.08);
+	}
+
+	.secondary-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
 
 	.spinner {
 		width: 10px;

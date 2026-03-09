@@ -1,0 +1,1304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Office Demo - Procedural Three.js</title>
+<style>
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  :root {
+    --bg: #101829;
+    --panel: rgba(8, 14, 34, 0.82);
+    --cyan: #00e7ff;
+    --magenta: #ff3b7a;
+    --purple: #8b5cff;
+    --green: #16f2a5;
+    --amber: #ffb347;
+    --blue: #6da8ff;
+    --muted: rgba(180, 200, 255, 0.56);
+  }
+
+  body {
+    background: radial-gradient(circle at top, #4f7cff 0%, #1e294d 22%, var(--bg) 62%);
+    color: #e9f6ff;
+    cursor: crosshair;
+    font-family: "Courier New", monospace;
+    overflow: hidden;
+  }
+
+  #app {
+    height: 100vh;
+    position: relative;
+    width: 100vw;
+  }
+
+  #stage {
+    display: block;
+    height: 100%;
+    width: 100%;
+  }
+
+  #hud {
+    inset: 0;
+    pointer-events: none;
+    position: absolute;
+  }
+
+  .corner {
+    border-color: rgba(0, 231, 255, 0.6);
+    border-style: solid;
+    height: 28px;
+    position: absolute;
+    width: 28px;
+  }
+
+  .corner.tl {
+    border-width: 2px 0 0 2px;
+    left: 16px;
+    top: 16px;
+  }
+
+  .corner.tr {
+    border-width: 2px 2px 0 0;
+    right: 16px;
+    top: 16px;
+  }
+
+  .corner.bl {
+    border-width: 0 0 2px 2px;
+    bottom: 16px;
+    left: 16px;
+  }
+
+  .corner.br {
+    border-width: 0 2px 2px 0;
+    bottom: 16px;
+    right: 16px;
+  }
+
+  #topbar {
+    align-items: center;
+    backdrop-filter: blur(8px);
+    background: rgba(3, 6, 18, 0.82);
+    border: 1px solid rgba(0, 231, 255, 0.18);
+    clip-path: polygon(12px 0%, calc(100% - 12px) 0%, 100% 12px, 100% 100%, calc(100% - 12px) 100%, 12px 100%, 0% calc(100% - 12px), 0% 12px);
+    display: flex;
+    gap: 24px;
+    left: 50%;
+    padding: 8px 22px;
+    position: absolute;
+    top: 16px;
+    transform: translateX(-50%);
+  }
+
+  #topbar .logo {
+    color: var(--cyan);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-shadow: 0 0 12px rgba(0, 231, 255, 0.55);
+  }
+
+  #topbar .sep {
+    color: rgba(0, 231, 255, 0.2);
+    font-size: 10px;
+  }
+
+  #topbar .label {
+    color: rgba(0, 231, 255, 0.56);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  #topbar .val {
+    color: var(--magenta);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-shadow: 0 0 8px rgba(255, 59, 122, 0.45);
+  }
+
+  #controls {
+    background: rgba(9, 16, 38, 0.78);
+    border: 1px solid rgba(0, 231, 255, 0.12);
+    bottom: 48px;
+    color: rgba(0, 231, 255, 0.36);
+    font-size: 10px;
+    left: 20px;
+    letter-spacing: 0.08em;
+    line-height: 1.8;
+    padding: 10px 14px;
+    position: absolute;
+  }
+
+  #controls span {
+    color: rgba(0, 231, 255, 0.8);
+  }
+
+  #bottombar {
+    background: rgba(10, 14, 34, 0.82);
+    border: 1px solid rgba(255, 59, 122, 0.18);
+    bottom: 16px;
+    clip-path: polygon(8px 0%, calc(100% - 8px) 0%, 100% 8px, 100% 100%, calc(100% - 8px) 100%, 8px 100%, 0% calc(100% - 8px), 0% 8px);
+    color: rgba(255, 59, 122, 0.72);
+    font-size: 10px;
+    left: 50%;
+    letter-spacing: 0.14em;
+    padding: 6px 18px;
+    position: absolute;
+    text-transform: uppercase;
+    transform: translateX(-50%);
+  }
+
+  #panel {
+    background: var(--panel);
+    border: 1px solid rgba(0, 231, 255, 0.28);
+    box-shadow: 0 24px 80px rgba(6, 10, 24, 0.28);
+    clip-path: polygon(16px 0%, 100% 0%, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0% 100%, 0% 16px);
+    padding: 20px;
+    pointer-events: auto;
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%) translateX(360px);
+    transition: transform 180ms ease-out;
+    width: min(340px, calc(100vw - 32px));
+  }
+
+  #panel.open {
+    transform: translateY(-50%) translateX(0);
+  }
+
+  #panel-close {
+    background: transparent;
+    border: none;
+    color: rgba(0, 231, 255, 0.4);
+    cursor: pointer;
+    font: inherit;
+    font-size: 16px;
+    position: absolute;
+    right: 14px;
+    top: 14px;
+  }
+
+  #panel-close:hover {
+    color: var(--cyan);
+  }
+
+  .panel-name {
+    color: var(--cyan);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.13em;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+  }
+
+  .panel-sub {
+    color: rgba(255, 59, 122, 0.76);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    margin-bottom: 14px;
+    text-transform: uppercase;
+  }
+
+  .panel-label {
+    color: rgba(0, 231, 255, 0.42);
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+  }
+
+  .panel-status {
+    align-items: center;
+    border: 1px solid;
+    display: inline-flex;
+    font-size: 10px;
+    gap: 6px;
+    letter-spacing: 0.1em;
+    margin-bottom: 14px;
+    padding: 4px 10px;
+    text-transform: uppercase;
+  }
+
+  .panel-status::before {
+    background: currentColor;
+    border-radius: 50%;
+    content: "";
+    height: 6px;
+    width: 6px;
+  }
+
+  .panel-status.idle {
+    color: var(--green);
+  }
+
+  .panel-status.busy {
+    color: var(--amber);
+  }
+
+  .panel-status.pending_user {
+    color: var(--blue);
+  }
+
+  .panel-status.offline {
+    color: rgba(188, 188, 188, 0.62);
+  }
+
+  .panel-divider {
+    border: none;
+    border-top: 1px solid rgba(0, 231, 255, 0.08);
+    margin: 14px 0;
+  }
+
+  .meta-grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .meta-box {
+    background: rgba(0, 231, 255, 0.03);
+    border: 1px solid rgba(0, 231, 255, 0.08);
+    min-width: 0;
+    padding: 8px 10px;
+  }
+
+  .meta-title {
+    color: rgba(0, 231, 255, 0.36);
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+  }
+
+  .meta-value {
+    color: #eef9ff;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #panel-copy {
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.6;
+  }
+
+  #hint {
+    color: rgba(235, 246, 255, 0.92);
+    left: 50%;
+    letter-spacing: 0.08em;
+    position: absolute;
+    top: 86px;
+    transform: translateX(-50%);
+  }
+
+  #hint strong {
+    color: var(--cyan);
+    font-size: 12px;
+  }
+
+  #scanlines,
+  #vignette {
+    inset: 0;
+    pointer-events: none;
+    position: absolute;
+  }
+
+  #scanlines {
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.05) 2px,
+      rgba(0, 0, 0, 0.05) 4px
+    );
+    opacity: 0.35;
+  }
+
+  #vignette {
+    background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.02) 0%, transparent 40%, rgba(3, 6, 18, 0.36) 100%);
+  }
+
+  @media (max-width: 900px) {
+    #topbar {
+      gap: 12px;
+      width: calc(100vw - 24px);
+    }
+
+    #topbar .sep {
+      display: none;
+    }
+
+    #panel {
+      bottom: 12px;
+      right: 12px;
+      top: auto;
+      transform: translateY(120%);
+      width: calc(100vw - 24px);
+    }
+
+    #panel.open {
+      transform: translateY(0);
+    }
+
+    #controls {
+      display: none;
+    }
+
+    #bottombar {
+      text-align: center;
+      width: calc(100vw - 24px);
+    }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="stage"></canvas>
+
+  <div id="hud">
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+
+    <div id="topbar">
+      <div class="logo">NEXUS / THREE.JS</div>
+      <div class="sep">|</div>
+      <div>
+        <div class="label">mode</div>
+        <div class="val">code only / procedural</div>
+      </div>
+      <div class="sep">|</div>
+      <div>
+        <div class="label">desks online</div>
+        <div class="val" id="hud-online">--</div>
+      </div>
+      <div class="sep">|</div>
+      <div>
+        <div class="label">system</div>
+        <div class="val" id="hud-time">--:--:--</div>
+      </div>
+    </div>
+
+    <div id="hint"><strong>Walk</strong> with WASD or arrow keys. Click a desk to inspect it.</div>
+
+    <div id="controls">
+      <span>WASD / arrows</span> -> walk<br>
+      <span>camera</span> -> locked follow<br>
+      <span>click desk</span> -> inspect station
+    </div>
+
+    <div id="bottombar">procedural office demo / brighter open floor / locked camera / walkable avatar</div>
+
+    <aside id="panel" aria-live="polite">
+      <button id="panel-close" type="button" aria-label="Close panel">x</button>
+      <div class="panel-name" id="panel-name">select a desk</div>
+      <div class="panel-sub" id="panel-sub">hover or click the room</div>
+
+      <div class="panel-label">status</div>
+      <div class="panel-status offline" id="panel-status">offline</div>
+
+      <hr class="panel-divider">
+
+      <div class="meta-grid">
+        <div class="meta-box">
+          <div class="meta-title">group</div>
+          <div class="meta-value" id="panel-group">-</div>
+        </div>
+        <div class="meta-box">
+          <div class="meta-title">desk</div>
+          <div class="meta-value" id="panel-desk">-</div>
+        </div>
+        <div class="meta-box">
+          <div class="meta-title">focus</div>
+          <div class="meta-value" id="panel-focus">-</div>
+        </div>
+        <div class="meta-box">
+          <div class="meta-title">scene type</div>
+          <div class="meta-value">procedural mesh</div>
+        </div>
+      </div>
+
+      <hr class="panel-divider">
+
+      <div class="panel-label">notes</div>
+      <p id="panel-copy">
+        This room is generated entirely in code. Every wall, desk, monitor, light, and marker is a Three.js primitive with materials, lights, and runtime interaction.
+      </p>
+    </aside>
+
+    <div id="scanlines"></div>
+    <div id="vignette"></div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from "three";
+
+const canvas = document.getElementById("stage");
+const panel = document.getElementById("panel");
+const panelClose = document.getElementById("panel-close");
+const panelName = document.getElementById("panel-name");
+const panelSub = document.getElementById("panel-sub");
+const panelStatus = document.getElementById("panel-status");
+const panelGroup = document.getElementById("panel-group");
+const panelDesk = document.getElementById("panel-desk");
+const panelFocus = document.getElementById("panel-focus");
+const panelCopy = document.getElementById("panel-copy");
+const hudOnline = document.getElementById("hud-online");
+const hudTime = document.getElementById("hud-time");
+
+const STATUS_COLORS = {
+  idle: 0x16f2a5,
+  busy: 0xffb347,
+  pending_user: 0x6da8ff,
+  offline: 0x666666
+};
+
+const GROUP_COLORS = {
+  "fi-backend": 0x00e7ff,
+  "fi-frontend": 0xff3b7a,
+  "ib-kha": 0x8b5cff
+};
+
+const FLOOR_LIMITS = {
+  minX: -9.4,
+  maxX: 9.4,
+  minZ: -5.8,
+  maxZ: 5.8
+};
+
+const DESKS = [
+  { name: "fi-backend1", group: "fi-backend", status: "busy", focus: "queue scheduler", x: -7.5, z: -3.2 },
+  { name: "fi-backend2", group: "fi-backend", status: "idle", focus: "worker routing", x: -3.2, z: -3.2 },
+  { name: "fi-frontend1", group: "fi-frontend", status: "pending_user", focus: "office ui", x: 1.6, z: -3.2 },
+  { name: "fi-frontend2", group: "fi-frontend", status: "busy", focus: "theme system", x: 5.9, z: -3.2 },
+  { name: "ib-kha", group: "ib-kha", status: "idle", focus: "research", x: 0.8, z: 3.8 }
+];
+
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  canvas,
+  powerPreference: "high-performance"
+});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x111b30);
+scene.fog = new THREE.FogExp2(0x162342, 0.014);
+
+const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(0, 8.5, 11.8);
+
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+const clock = new THREE.Clock();
+const cameraOffset = new THREE.Vector3(0, 9.4, 13.4);
+const lookOffset = new THREE.Vector3(0, 1.3, -2.4);
+const desiredCameraPosition = new THREE.Vector3();
+const desiredLookTarget = new THREE.Vector3();
+const avatarVelocity = new THREE.Vector3();
+const moveState = {
+  forward: false,
+  backward: false,
+  left: false,
+  right: false
+};
+
+const ambient = new THREE.HemisphereLight(0xb4d7ff, 0x2a3150, 2.2);
+scene.add(ambient);
+
+const keyLight = new THREE.SpotLight(0xcbe6ff, 110, 56, Math.PI / 4.8, 0.35, 1.1);
+keyLight.position.set(0, 14, 7.5);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(1024, 1024);
+scene.add(keyLight);
+scene.add(keyLight.target);
+keyLight.target.position.set(0, 0, -1);
+
+const sunFill = new THREE.DirectionalLight(0xffffff, 1.35);
+sunFill.position.set(-5, 10, 6);
+scene.add(sunFill);
+
+const magentaLight = new THREE.PointLight(0xff3b7a, 26, 24, 2);
+magentaLight.position.set(-9, 4.5, 0);
+scene.add(magentaLight);
+
+const cyanLight = new THREE.PointLight(0x00e7ff, 26, 24, 2);
+cyanLight.position.set(9, 4.5, 0);
+scene.add(cyanLight);
+
+const ceilingGlow = new THREE.PointLight(0x8b5cff, 18, 22, 2);
+ceilingGlow.position.set(0, 8, -5);
+scene.add(ceilingGlow);
+
+function addRoom() {
+  const room = new THREE.Group();
+  const floorMat = new THREE.MeshStandardMaterial({
+    color: 0x18243f,
+    metalness: 0.56,
+    roughness: 0.46
+  });
+
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(22, 0.5, 14), floorMat);
+  floor.position.y = -0.25;
+  floor.receiveShadow = true;
+  room.add(floor);
+
+  const grid = new THREE.GridHelper(22, 22, 0x00e7ff, 0x14304a);
+  grid.material.opacity = 0.32;
+  grid.material.transparent = true;
+  grid.position.y = 0.01;
+  room.add(grid);
+
+  const liftStripMaterial = new THREE.MeshStandardMaterial({
+    color: 0x182c45,
+    emissive: 0xd7f7ff,
+    emissiveIntensity: 1.4,
+    metalness: 0.1,
+    roughness: 0.4
+  });
+
+  for (const x of [-7.5, -3.3, 0.9, 5.1]) {
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.03, 12.8), liftStripMaterial);
+    strip.position.set(x, 0.04, 0);
+    room.add(strip);
+  }
+
+  for (let x = -8; x <= 8; x += 4) {
+    const strip = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, 0.02, 12.8),
+      new THREE.MeshStandardMaterial({
+        color: 0x122034,
+        emissive: 0x00d4ff,
+        emissiveIntensity: 2.1,
+        metalness: 0.2,
+        roughness: 0.4
+      })
+    );
+    strip.position.set(x, 0.02, 0);
+    room.add(strip);
+  }
+
+  for (let z = -4; z <= 4; z += 4) {
+    const lane = new THREE.Mesh(
+      new THREE.BoxGeometry(20, 0.02, 0.12),
+      new THREE.MeshStandardMaterial({
+        color: 0x24152a,
+        emissive: 0xff3b7a,
+        emissiveIntensity: 1.55
+      })
+    );
+    lane.position.set(0, 0.03, z);
+    room.add(lane);
+  }
+
+  const stageBorder = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(22, 0.5, 14)),
+    new THREE.LineBasicMaterial({ color: 0x00e7ff, transparent: true, opacity: 0.2 })
+  );
+  stageBorder.position.copy(floor.position);
+  room.add(stageBorder);
+
+  scene.add(room);
+}
+
+function addNeonColumns() {
+  const columnPositions = [
+    [-10, 2.6, -6.2],
+    [10, 2.6, -6.2],
+    [-10, 2.6, 6.2],
+    [10, 2.6, 6.2]
+  ];
+
+  for (const [x, y, z] of columnPositions) {
+    const shell = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.18, 0.18, 5.2, 12),
+      new THREE.MeshStandardMaterial({
+        color: 0x2a3b62,
+        metalness: 0.8,
+        roughness: 0.35
+      })
+    );
+    shell.position.set(x, y, z);
+    scene.add(shell);
+
+    const glow = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04, 0.04, 4.6, 8),
+      new THREE.MeshStandardMaterial({
+        color: 0x00e7ff,
+        emissive: 0x00e7ff,
+        emissiveIntensity: 3.1,
+        metalness: 0.1,
+        roughness: 0.2
+      })
+    );
+    glow.position.set(x, y, z);
+    scene.add(glow);
+  }
+}
+
+function addCeilingPanels() {
+  // Intentionally empty for the open-floor prototype.
+}
+
+function createZonePlate(x, z, color, labelWidth) {
+  const base = new THREE.Mesh(
+    new THREE.BoxGeometry(labelWidth, 0.08, 0.35),
+    new THREE.MeshStandardMaterial({
+      color: 0x0a0c16,
+      emissive: color,
+      emissiveIntensity: 1.6
+    })
+  );
+  base.position.set(x, 1.8, z);
+  scene.add(base);
+}
+
+function addZones() {
+  createZonePlate(-5.4, -5.4, GROUP_COLORS["fi-backend"], 4.4);
+  createZonePlate(3.8, -5.4, GROUP_COLORS["fi-frontend"], 4.8);
+  createZonePlate(0.8, 1.7, GROUP_COLORS["ib-kha"], 3.6);
+}
+
+const deskColliders = DESKS.map((desk) => ({
+  x: desk.x,
+  z: desk.z + 0.18,
+  halfWidth: 1.15,
+  halfDepth: 0.98
+}));
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function createAvatar() {
+  const root = new THREE.Group();
+  root.position.set(-8.2, 0, 4.9);
+
+  const shadow = new THREE.Mesh(
+    new THREE.CircleGeometry(0.42, 24),
+    new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.16
+    })
+  );
+  shadow.rotation.x = -Math.PI / 2;
+  shadow.position.y = 0.02;
+  root.add(shadow);
+
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(0.44, 0.035, 10, 28),
+    new THREE.MeshStandardMaterial({
+      color: 0x00e7ff,
+      emissive: 0x00e7ff,
+      emissiveIntensity: 1.8,
+      transparent: true,
+      opacity: 0.9
+    })
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.04;
+  root.add(ring);
+
+  const limbMaterial = new THREE.MeshStandardMaterial({
+    color: 0x1b2b4c,
+    emissive: 0x142241,
+    emissiveIntensity: 0.35,
+    metalness: 0.35,
+    roughness: 0.45
+  });
+
+  const hip = new THREE.Group();
+  hip.position.y = 0.84;
+  root.add(hip);
+
+  function createLeg(offsetX) {
+    const pivot = new THREE.Group();
+    pivot.position.set(offsetX, 0, 0);
+    hip.add(pivot);
+
+    const mesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.1, 0.14, 0.78, 10),
+      limbMaterial.clone()
+    );
+    mesh.position.y = -0.39;
+    mesh.castShadow = true;
+    pivot.add(mesh);
+
+    return pivot;
+  }
+
+  const leftLeg = createLeg(-0.14);
+  const rightLeg = createLeg(0.14);
+
+  const torso = new THREE.Mesh(
+    new THREE.BoxGeometry(0.56, 0.82, 0.34),
+    new THREE.MeshStandardMaterial({
+      color: 0xeff7ff,
+      emissive: 0x00e7ff,
+      emissiveIntensity: 0.4,
+      metalness: 0.18,
+      roughness: 0.22
+    })
+  );
+  torso.position.y = 1.07;
+  torso.castShadow = true;
+  root.add(torso);
+
+  const shoulder = new THREE.Group();
+  shoulder.position.y = 1.34;
+  root.add(shoulder);
+
+  function createArm(offsetX) {
+    const pivot = new THREE.Group();
+    pivot.position.set(offsetX, 0, 0);
+    shoulder.add(pivot);
+
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.12, 0.56, 0.12),
+      new THREE.MeshStandardMaterial({
+        color: 0xd9ecff,
+        emissive: 0x3a70ff,
+        emissiveIntensity: 0.12,
+        metalness: 0.15,
+        roughness: 0.28
+      })
+    );
+    mesh.position.y = -0.28;
+    mesh.castShadow = true;
+    pivot.add(mesh);
+
+    return pivot;
+  }
+
+  const leftArm = createArm(-0.36);
+  const rightArm = createArm(0.36);
+
+  const visor = new THREE.Mesh(
+    new THREE.BoxGeometry(0.3, 0.12, 0.16),
+    new THREE.MeshStandardMaterial({
+      color: 0x091420,
+      emissive: 0x00e7ff,
+      emissiveIntensity: 2.1
+    })
+  );
+  visor.position.set(0, 1.48, 0.2);
+  visor.castShadow = true;
+  root.add(visor);
+
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.24, 18, 18),
+    new THREE.MeshStandardMaterial({
+      color: 0xf7fbff,
+      emissive: 0x4d7dff,
+      emissiveIntensity: 0.2,
+      metalness: 0.12,
+      roughness: 0.28
+    })
+  );
+  head.position.y = 1.46;
+  head.castShadow = true;
+  root.add(head);
+
+  const label = new THREE.Mesh(
+    new THREE.BoxGeometry(0.64, 0.06, 0.06),
+    new THREE.MeshStandardMaterial({
+      color: 0x00e7ff,
+      emissive: 0x00e7ff,
+      emissiveIntensity: 1.8
+    })
+  );
+  label.position.set(0, 1.95, 0);
+  root.add(label);
+
+  scene.add(root);
+
+  return {
+    root,
+    ring,
+    hip,
+    leftLeg,
+    rightLeg,
+    leftArm,
+    rightArm,
+    torso,
+    head,
+    shadow
+  };
+}
+
+const avatar = createAvatar();
+
+const deskEntries = [];
+const interactables = [];
+let hoveredEntry = null;
+let selectedEntry = null;
+
+function createDeskStation(data, index) {
+  const accent = GROUP_COLORS[data.group];
+  const statusColor = STATUS_COLORS[data.status];
+  const group = new THREE.Group();
+  group.position.set(data.x, 0, data.z);
+  group.userData.entry = null;
+
+  const deskMat = new THREE.MeshStandardMaterial({
+    color: 0x111522,
+    metalness: 0.82,
+    roughness: 0.42
+  });
+
+  const top = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.14, 1.2), deskMat);
+  top.position.set(0, 1.15, 0);
+  top.castShadow = true;
+  top.receiveShadow = true;
+  group.add(top);
+
+  const legGeo = new THREE.BoxGeometry(0.12, 1.05, 0.12);
+  for (const [lx, lz] of [
+    [-0.92, -0.48],
+    [0.92, -0.48],
+    [-0.92, 0.48],
+    [0.92, 0.48]
+  ]) {
+    const leg = new THREE.Mesh(legGeo, deskMat);
+    leg.position.set(lx, 0.55, lz);
+    leg.castShadow = true;
+    group.add(leg);
+  }
+
+  const sideCabinet = new THREE.Mesh(
+    new THREE.BoxGeometry(0.48, 0.92, 0.92),
+    new THREE.MeshStandardMaterial({
+      color: 0x0d1020,
+      metalness: 0.9,
+      roughness: 0.32
+    })
+  );
+  sideCabinet.position.set(-0.75, 0.46, 0);
+  sideCabinet.castShadow = true;
+  group.add(sideCabinet);
+
+  const screenMat = new THREE.MeshStandardMaterial({
+    color: 0x0d1421,
+    emissive: statusColor,
+    emissiveIntensity: data.status === "busy" ? 2.6 : 1.6,
+    metalness: 0.3,
+    roughness: 0.25
+  });
+
+  const screenShell = new THREE.Mesh(
+    new THREE.BoxGeometry(0.85, 0.52, 0.06),
+    new THREE.MeshStandardMaterial({
+      color: 0x101624,
+      metalness: 0.75,
+      roughness: 0.35
+    })
+  );
+  screenShell.position.set(0.32, 1.7, -0.16);
+  screenShell.castShadow = true;
+  group.add(screenShell);
+
+  const screen = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.42, 0.03), screenMat);
+  screen.position.set(0.32, 1.7, -0.12);
+  group.add(screen);
+
+  const stand = new THREE.Mesh(
+    new THREE.BoxGeometry(0.08, 0.42, 0.08),
+    new THREE.MeshStandardMaterial({
+      color: 0x202838,
+      metalness: 0.7,
+      roughness: 0.4
+    })
+  );
+  stand.position.set(0.32, 1.42, -0.16);
+  group.add(stand);
+
+  const chairBase = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.14, 0.18, 0.14, 12),
+    new THREE.MeshStandardMaterial({
+      color: 0x141826,
+      metalness: 0.8,
+      roughness: 0.35
+    })
+  );
+  chairBase.position.set(0, 0.48, 1.05);
+  chairBase.castShadow = true;
+  group.add(chairBase);
+
+  const chairSeat = new THREE.Mesh(
+    new THREE.BoxGeometry(0.66, 0.12, 0.66),
+    new THREE.MeshStandardMaterial({
+      color: 0x22152f,
+      emissive: accent,
+      emissiveIntensity: 0.18
+    })
+  );
+  chairSeat.position.set(0, 0.84, 1.03);
+  chairSeat.castShadow = true;
+  group.add(chairSeat);
+
+  const chairBack = new THREE.Mesh(
+    new THREE.BoxGeometry(0.66, 0.72, 0.12),
+    chairSeat.material.clone()
+  );
+  chairBack.position.set(0, 1.22, 1.36);
+  chairBack.rotation.x = 0.16;
+  chairBack.castShadow = true;
+  group.add(chairBack);
+
+  const beaconMat = new THREE.MeshStandardMaterial({
+    color: 0xf6f0ff,
+    emissive: accent,
+    emissiveIntensity: 1.7,
+    metalness: 0.2,
+    roughness: 0.25
+  });
+
+  const beaconStem = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.05, 0.05, 0.95, 10),
+    new THREE.MeshStandardMaterial({
+      color: 0x171b28,
+      metalness: 0.7,
+      roughness: 0.35
+    })
+  );
+  beaconStem.position.set(0, 1.6, 0.42);
+  group.add(beaconStem);
+
+  const beaconHead = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 16), beaconMat);
+  beaconHead.position.set(0, 2.15, 0.42);
+  group.add(beaconHead);
+
+  const halo = new THREE.Mesh(
+    new THREE.TorusGeometry(0.42, 0.03, 10, 32),
+    new THREE.MeshStandardMaterial({
+      color: accent,
+      emissive: accent,
+      emissiveIntensity: 1.8,
+      transparent: true,
+      opacity: 0.95
+    })
+  );
+  halo.position.set(0, 2.12, 0.42);
+  halo.rotation.x = Math.PI / 2;
+  group.add(halo);
+
+  const selectionRing = new THREE.Mesh(
+    new THREE.TorusGeometry(1.46, 0.05, 12, 40),
+    new THREE.MeshStandardMaterial({
+      color: accent,
+      emissive: accent,
+      emissiveIntensity: 2.1,
+      transparent: true,
+      opacity: 0
+    })
+  );
+  selectionRing.rotation.x = Math.PI / 2;
+  selectionRing.position.set(0, 0.04, 0);
+  group.add(selectionRing);
+
+  const hitArea = new THREE.Mesh(
+    new THREE.BoxGeometry(2.7, 2.8, 2.2),
+    new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      depthWrite: false
+    })
+  );
+  hitArea.position.set(0, 1.3, 0.2);
+  hitArea.userData.entryIndex = index;
+  group.add(hitArea);
+  interactables.push(hitArea);
+
+  const localLight = new THREE.PointLight(statusColor, data.status === "offline" ? 0 : 2.8, 4.5, 2);
+  localLight.position.set(0.32, 1.7, -0.05);
+  group.add(localLight);
+
+  const entry = {
+    data,
+    group,
+    screenMat,
+    beaconMat,
+    halo,
+    selectionRing,
+    beaconHead,
+    localLight,
+    chairMat: chairSeat.material,
+    baseIntensity: data.status === "busy" ? 2.6 : data.status === "pending_user" ? 2 : data.status === "idle" ? 1.5 : 0.08
+  };
+
+  group.userData.entry = entry;
+  scene.add(group);
+  deskEntries.push(entry);
+}
+
+function addDesks() {
+  DESKS.forEach((desk, index) => createDeskStation(desk, index));
+}
+
+function addAmbientParticles() {
+  const count = 220;
+  const positions = new Float32Array(count * 3);
+  for (let i = 0; i < count; i += 1) {
+    positions[i * 3 + 0] = (Math.random() - 0.5) * 28;
+    positions[i * 3 + 1] = Math.random() * 8 + 0.5;
+    positions[i * 3 + 2] = (Math.random() - 0.5) * 22;
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+
+  const material = new THREE.PointsMaterial({
+    color: 0x00d8ff,
+    size: 0.045,
+    transparent: true,
+    opacity: 0.45
+  });
+
+  const points = new THREE.Points(geometry, material);
+  points.name = "particles";
+  scene.add(points);
+  return points;
+}
+
+function updateClock() {
+  const now = new Date();
+  hudTime.textContent = [
+    now.getHours().toString().padStart(2, "0"),
+    now.getMinutes().toString().padStart(2, "0"),
+    now.getSeconds().toString().padStart(2, "0")
+  ].join(":");
+}
+
+function statusClass(status) {
+  return status;
+}
+
+function statusLabel(status) {
+  return status.replace("_", " ").toUpperCase();
+}
+
+function updateHudCounts() {
+  const online = DESKS.filter((desk) => desk.status !== "offline").length;
+  hudOnline.textContent = `${online} / ${DESKS.length}`;
+}
+
+function clearPanel() {
+  panel.classList.remove("open");
+  panelName.textContent = "select a desk";
+  panelSub.textContent = "walk the room or click a desk";
+  panelStatus.textContent = "offline";
+  panelStatus.className = "panel-status offline";
+  panelGroup.textContent = "-";
+  panelDesk.textContent = "-";
+  panelFocus.textContent = "-";
+  panelCopy.textContent = "This room is generated entirely in code. The camera is locked, the floor is open, and the avatar can walk without the scene feeling like a heavy block of geometry.";
+}
+
+function openPanel(entry) {
+  const { data } = entry;
+  panel.classList.add("open");
+  panelName.textContent = data.name;
+  panelSub.textContent = `${data.group} station`;
+  panelStatus.textContent = statusLabel(data.status);
+  panelStatus.className = `panel-status ${statusClass(data.status)}`;
+  panelGroup.textContent = data.group;
+  panelDesk.textContent = `${data.x.toFixed(1)}, ${data.z.toFixed(1)}`;
+  panelFocus.textContent = data.focus;
+  panelCopy.textContent = `${data.name} uses a code-generated desk cluster with emissive monitor materials, local point light, and a raycast hit area. This is the pattern you can later bind to real worker data.`;
+}
+
+function setSelectedEntry(entry) {
+  selectedEntry = entry;
+  if (entry) {
+    openPanel(entry);
+  } else {
+    clearPanel();
+  }
+}
+
+function setHoveredEntry(entry) {
+  hoveredEntry = entry;
+  document.body.style.cursor = entry ? "pointer" : "crosshair";
+}
+
+function getIntersectedEntry(event) {
+  const rect = canvas.getBoundingClientRect();
+  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const hit = raycaster.intersectObjects(interactables, false)[0];
+  if (!hit) return null;
+  return deskEntries[hit.object.userData.entryIndex] || null;
+}
+
+canvas.addEventListener("pointermove", (event) => {
+  setHoveredEntry(getIntersectedEntry(event));
+});
+
+canvas.addEventListener("click", (event) => {
+  setSelectedEntry(getIntersectedEntry(event));
+});
+
+panelClose.addEventListener("click", () => {
+  setSelectedEntry(null);
+});
+
+window.addEventListener("keydown", (event) => {
+  if (event.key === "w" || event.key === "W" || event.key === "ArrowUp") moveState.forward = true;
+  if (event.key === "s" || event.key === "S" || event.key === "ArrowDown") moveState.backward = true;
+  if (event.key === "a" || event.key === "A" || event.key === "ArrowLeft") moveState.left = true;
+  if (event.key === "d" || event.key === "D" || event.key === "ArrowRight") moveState.right = true;
+  if (event.key === "Escape") {
+    setSelectedEntry(null);
+  }
+});
+
+window.addEventListener("keyup", (event) => {
+  if (event.key === "w" || event.key === "W" || event.key === "ArrowUp") moveState.forward = false;
+  if (event.key === "s" || event.key === "S" || event.key === "ArrowDown") moveState.backward = false;
+  if (event.key === "a" || event.key === "A" || event.key === "ArrowLeft") moveState.left = false;
+  if (event.key === "d" || event.key === "D" || event.key === "ArrowRight") moveState.right = false;
+});
+
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+addRoom();
+addNeonColumns();
+addCeilingPanels();
+addZones();
+addDesks();
+const particleField = addAmbientParticles();
+updateHudCounts();
+updateClock();
+clearPanel();
+setInterval(updateClock, 1000);
+
+function animate() {
+  const delta = Math.min(clock.getDelta(), 0.05);
+  const elapsed = clock.elapsedTime;
+
+  avatarVelocity.set(0, 0, 0);
+  if (moveState.forward) avatarVelocity.z -= 1;
+  if (moveState.backward) avatarVelocity.z += 1;
+  if (moveState.left) avatarVelocity.x -= 1;
+  if (moveState.right) avatarVelocity.x += 1;
+
+  if (avatarVelocity.lengthSq() > 0) {
+    avatarVelocity.normalize().multiplyScalar(delta * 4.2);
+    const nextX = clamp(avatar.root.position.x + avatarVelocity.x, FLOOR_LIMITS.minX, FLOOR_LIMITS.maxX);
+    const nextZ = clamp(avatar.root.position.z + avatarVelocity.z, FLOOR_LIMITS.minZ, FLOOR_LIMITS.maxZ);
+
+    let blocked = false;
+    for (const collider of deskColliders) {
+      if (
+        Math.abs(nextX - collider.x) < collider.halfWidth &&
+        Math.abs(nextZ - collider.z) < collider.halfDepth
+      ) {
+        blocked = true;
+        break;
+      }
+    }
+
+    if (!blocked) {
+      avatar.root.position.x = nextX;
+      avatar.root.position.z = nextZ;
+    }
+
+    avatar.root.rotation.y = Math.atan2(avatarVelocity.x, avatarVelocity.z);
+  }
+
+  desiredCameraPosition.copy(avatar.root.position).add(cameraOffset);
+  camera.position.lerp(desiredCameraPosition, 0.08);
+  desiredLookTarget.copy(avatar.root.position).add(lookOffset);
+  camera.lookAt(desiredLookTarget);
+
+  keyLight.intensity = 108 + Math.sin(elapsed * 0.9) * 5;
+  cyanLight.intensity = 24 + Math.sin(elapsed * 1.4) * 3;
+  magentaLight.intensity = 24 + Math.cos(elapsed * 1.2) * 3;
+  ceilingGlow.intensity = 18 + Math.sin(elapsed * 1.1) * 1.6;
+
+  if (particleField) {
+    particleField.rotation.y = elapsed * 0.03;
+  }
+
+  const walkStrength = avatarVelocity.lengthSq() > 0 ? 1 : 0;
+  const walkPhase = elapsed * 11;
+  const legSwing = Math.sin(walkPhase) * 0.65 * walkStrength;
+  const armSwing = Math.sin(walkPhase) * 0.55 * walkStrength;
+  const bounce = Math.abs(Math.sin(walkPhase)) * 0.11 * walkStrength;
+  const idleSway = Math.sin(elapsed * 2.4) * 0.04 * (1 - walkStrength);
+
+  avatar.hip.position.y = 0.84 - bounce;
+  avatar.torso.position.y = 1.07 - bounce * 0.45;
+  avatar.torso.rotation.z = idleSway;
+  avatar.leftLeg.rotation.x = legSwing;
+  avatar.rightLeg.rotation.x = -legSwing;
+  avatar.leftArm.rotation.x = -armSwing;
+  avatar.rightArm.rotation.x = armSwing;
+
+  avatar.head.position.y = 1.46 - bounce * 0.25 + Math.sin(elapsed * 5.2) * (walkStrength ? 0.018 : 0.015);
+  avatar.ring.rotation.z = elapsed * 0.75;
+  avatar.shadow.scale.setScalar(1 + Math.sin(elapsed * 3.2) * 0.02 + walkStrength * 0.03);
+
+  for (const entry of deskEntries) {
+    const { data } = entry;
+    const pulse = Math.sin(elapsed * 2.6 + entry.group.position.x) * 0.5 + 0.5;
+    const hot = entry === selectedEntry ? 1 : entry === hoveredEntry ? 0.58 : 0;
+    const alive = data.status === "offline" ? 0.1 : 1;
+
+    entry.screenMat.emissiveIntensity = (entry.baseIntensity + hot * 1.3 + pulse * 0.25) * alive;
+    entry.beaconMat.emissiveIntensity = (1.1 + pulse * 0.55 + hot * 1.4) * alive;
+    entry.localLight.intensity = (1.3 + pulse * 0.9 + hot * 1.1) * alive;
+
+    entry.beaconHead.position.y = 2.12 + Math.sin(elapsed * 2 + entry.group.position.x) * 0.08;
+    entry.halo.position.y = entry.beaconHead.position.y - 0.03;
+    entry.halo.rotation.z = elapsed * 0.7;
+    entry.halo.material.opacity = 0.45 + pulse * 0.3 + hot * 0.2;
+
+    entry.selectionRing.material.opacity = hot > 0 ? 0.9 : 0;
+    entry.selectionRing.scale.setScalar(1 + pulse * 0.04 + hot * 0.03);
+
+    entry.chairMat.emissiveIntensity = 0.14 + hot * 0.38;
+  }
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+
+animate();
+</script>
+</body>
+</html>

@@ -51,8 +51,19 @@ type WorkerRepository interface {
 	UpdateCLICommand(ctx context.Context, workerID uuid.UUID, cliCommand string) error
 	// UpdateMapPosition updates the worker desk tile coordinates for Office view.
 	UpdateMapPosition(ctx context.Context, workerID uuid.UUID, mapX, mapY int) error
+	// UpdateInstructionFields updates one or more worker instruction fields.
+	UpdateInstructionFields(ctx context.Context, workerID uuid.UUID, patch WorkerInstructionPatch) error
 	// DeleteWorker soft-deletes a worker by setting deleted_at.
 	DeleteWorker(ctx context.Context, workerID uuid.UUID) error
+}
+
+type WorkerInstructionPatch struct {
+	HasInstructionJob     bool
+	InstructionJob        string
+	HasInstructionPlan    bool
+	InstructionPlan       string
+	HasInstructionDiscuss bool
+	InstructionDiscuss    string
 }
 
 // MessageRepository defines data access for messages.

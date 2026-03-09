@@ -21,6 +21,7 @@ import (
 type WorkerService interface {
 	CreateWorker(ctx context.Context, req domains.CreateWorkerRequest) (*domains.WorkerResponse, error)
 	UpdateWorker(ctx context.Context, workerID uuid.UUID, req domains.UpdateWorkerRequest) (*domains.WorkerResponse, error)
+	ResetInstruction(ctx context.Context, workerID uuid.UUID, field models.WorkerInstructionField) (*domains.WorkerResponse, error)
 	ListWorkers(ctx context.Context) ([]*domains.WorkerResponse, error)
 	GetWorker(ctx context.Context, workerID uuid.UUID) (*domains.WorkerResponse, error)
 	PingWorker(ctx context.Context, workerID uuid.UUID) (*domains.PingWorkerResponse, error)
@@ -123,6 +124,7 @@ func (s *workerService) CreateWorker(ctx context.Context, req domains.CreateWork
 		MapY:        0,
 		Status:      models.WorkerStatusIdle,
 	}
+	applyFactoryWorkerInstructions(worker)
 
 	if err := s.workerRepo.CreateWorker(ctx, worker); err != nil {
 		_ = os.RemoveAll(workspace)
@@ -175,6 +177,66 @@ func (s *workerService) UpdateWorker(ctx context.Context, workerID uuid.UUID, re
 		}
 		worker.MapX = mapX
 		worker.MapY = mapY
+	}
+
+	if req.InstructionJob != nil || req.InstructionPlan != nil || req.InstructionDiscuss != nil {
+		patch := repository.WorkerInstructionPatch{}
+
+		if req.InstructionJob != nil {
+			patch.HasInstructionJob = true
+			patch.InstructionJob = strings.TrimSpace(*req.InstructionJob)
+			worker.InstructionJob = patch.InstructionJob
+		}
+		if req.InstructionPlan != nil {
+			patch.HasInstructionPlan = true
+			patch.InstructionPlan = strings.TrimSpace(*req.InstructionPlan)
+			worker.InstructionPlan = patch.InstructionPlan
+		}
+		if req.InstructionDiscuss != nil {
+			patch.HasInstructionDiscuss = true
+			patch.InstructionDiscuss = strings.TrimSpace(*req.InstructionDiscuss)
+			worker.InstructionDiscuss = patch.InstructionDiscuss
+		}
+
+		if err := s.workerRepo.UpdateInstructionFields(ctx, workerID, patch); err != nil {
+			return nil, err
+		}
+	}
+
+	return toWorkerResponse(worker), nil
+}
+
+func (s *workerService) ResetInstruction(ctx context.Context, workerID uuid.UUID, field models.WorkerInstructionField) (*domains.WorkerResponse, error) {
+	worker, err := s.workerRepo.GetByID(ctx, workerID)
+	if err != nil {
+		return nil, errors.New("worker not found")
+	}
+
+	value, err := factoryWorkerInstruction(field)
+	if err != nil {
+		return nil, err
+	}
+
+	patch := repository.WorkerInstructionPatch{}
+	switch field {
+	case models.WorkerInstructionFieldJob:
+		patch.HasInstructionJob = true
+		patch.InstructionJob = value
+		worker.InstructionJob = value
+	case models.WorkerInstructionFieldPlan:
+		patch.HasInstructionPlan = true
+		patch.InstructionPlan = value
+		worker.InstructionPlan = value
+	case models.WorkerInstructionFieldDiscuss:
+		patch.HasInstructionDiscuss = true
+		patch.InstructionDiscuss = value
+		worker.InstructionDiscuss = value
+	default:
+		return nil, errors.New("invalid instruction field")
+	}
+
+	if err := s.workerRepo.UpdateInstructionFields(ctx, workerID, patch); err != nil {
+		return nil, err
 	}
 
 	return toWorkerResponse(worker), nil
@@ -257,16 +319,19 @@ func (s *workerService) CreateGroup(ctx context.Context, name string) (*domains.
 
 func toWorkerResponse(w *models.Worker) *domains.WorkerResponse {
 	return &domains.WorkerResponse{
-		WorkerID:     w.WorkerID.String(),
-		GroupName:    w.GroupName,
-		Name:         w.Name,
-		CLICommand:   w.CLICommand,
-		Workspace:    w.Workspace,
-		GitRepoURL:   w.GitRepoURL,
-		MapX:         w.MapX,
-		MapY:         w.MapY,
-		Status:       string(w.Status),
-		LastActiveAt: w.LastActiveAt,
-		CreatedAt:    w.CreatedAt,
+		WorkerID:           w.WorkerID.String(),
+		GroupName:          w.GroupName,
+		Name:               w.Name,
+		CLICommand:         w.CLICommand,
+		Workspace:          w.Workspace,
+		GitRepoURL:         w.GitRepoURL,
+		InstructionJob:     w.InstructionJob,
+		InstructionPlan:    w.InstructionPlan,
+		InstructionDiscuss: w.InstructionDiscuss,
+		MapX:               w.MapX,
+		MapY:               w.MapY,
+		Status:             string(w.Status),
+		LastActiveAt:       w.LastActiveAt,
+		CreatedAt:          w.CreatedAt,
 	}
 }

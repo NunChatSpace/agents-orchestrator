@@ -27,8 +27,10 @@
 		try {
 			const job = await createJob(e.detail);
 			upsertJob(job);
-			const queued = await submitJob(job.job_id);
-			upsertJob(queued);
+			if (e.detail.manual_worker_override) {
+				const queued = await submitJob(job.job_id, e.detail.manual_worker_override);
+				upsertJob(queued);
+			}
 			goto(`/jobs/${job.job_id}`);
 		} catch {
 			// ignore

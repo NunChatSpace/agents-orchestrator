@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/chatchawan/agent-orchestrator/internal/domains"
+	"github.com/chatchawan/agent-orchestrator/internal/models"
 	"github.com/chatchawan/agent-orchestrator/internal/services"
 	"github.com/chatchawan/agent-orchestrator/internal/views"
 	"github.com/google/uuid"
@@ -115,7 +116,7 @@ func (c *WorkerController) Delete(w http.ResponseWriter, r *http.Request) {
 	views.JSON(w, http.StatusNoContent, nil, rid)
 }
 
-// Update handles PATCH /workers/{worker_id} — updates worker settings (cli_command, map_x, map_y).
+// Update handles PATCH /workers/{worker_id} — updates worker settings.
 func (c *WorkerController) Update(w http.ResponseWriter, r *http.Request) {
 	rid := reqID(r)
 	workerID, err := uuid.Parse(mux.Vars(r)["worker_id"])
@@ -133,6 +134,30 @@ func (c *WorkerController) Update(w http.ResponseWriter, r *http.Request) {
 		views.Error(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error(), rid)
 		return
 	}
+	views.JSON(w, http.StatusOK, worker, rid)
+}
+
+// ResetInstruction handles POST /workers/{worker_id}/instructions/reset/{field}.
+func (c *WorkerController) ResetInstruction(w http.ResponseWriter, r *http.Request) {
+	rid := reqID(r)
+	workerID, err := uuid.Parse(mux.Vars(r)["worker_id"])
+	if err != nil {
+		views.Error(w, http.StatusBadRequest, "BAD_REQUEST", "invalid worker_id", rid)
+		return
+	}
+
+	field := mux.Vars(r)["field"]
+	if !models.IsWorkerInstructionField(field) {
+		views.Error(w, http.StatusBadRequest, "BAD_REQUEST", "invalid instruction field", rid)
+		return
+	}
+
+	worker, err := c.workerSvc.ResetInstruction(r.Context(), workerID, models.WorkerInstructionField(field))
+	if err != nil {
+		views.Error(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error(), rid)
+		return
+	}
+
 	views.JSON(w, http.StatusOK, worker, rid)
 }
 

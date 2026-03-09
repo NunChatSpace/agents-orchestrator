@@ -123,6 +123,13 @@ func NewUserService(repo repository.UserRepository) UserService {
 - Handle transactions if needed
 - Transform data between layers
 
+For this project, instruction composition belongs in the service layer. The backend stores three worker-owned instruction fields:
+- `instruction_job`
+- `instruction_plan`
+- `instruction_discuss`
+
+Factory defaults for those fields live in backend code. Worker creation seeds the three fields from the hardcoded defaults, and runtime dispatch reads only the worker record before invoking the CLI.
+
 ### 4. Repository (`/internal/repository/`)
 
 **Purpose:** Data access (database queries)
@@ -147,6 +154,8 @@ type userRepo struct {
 - Filter with `WHERE deleted_at IS NULL`
 - Use prepared statements or query builder
 - Implement Dataloader for batch loading (prevent N+1)
+
+Do not create a singleton instruction-settings table for worker prompting. Factory defaults belong in backend code, while runtime instruction state belongs on the worker record.
 
 ### 5. Models (`/internal/models/`)
 
@@ -647,8 +656,8 @@ WHERE search_vector @@ plainto_tsquery('english', $1);
 
 Worker response payloads include office placement fields:
 
-- `map_x` (integer tile coordinate, default `0`)
-- `map_y` (integer tile coordinate, default `0`)
+- `map_x` (integer logical desk-grid X coordinate, default `0`)
+- `map_y` (integer logical desk-grid Y coordinate, default `0`)
 - `created_at` (used by frontend fallback desk ordering)
 
 Schema change: migration `008_worker_map_position.sql` adds `workers.map_x` and `workers.map_y`.
@@ -693,25 +702,24 @@ Key methods:
 | `/agents/[worker_id]/jobs` | `routes/(app)/agents/[worker_id]/jobs/+page.svelte` | Job list for a specific agent |
 | `/agents/[worker_id]/settings` | `routes/(app)/agents/[worker_id]/settings/+page.svelte` | Agent settings + health check |
 | `/plans` | `routes/(app)/plans/+page.svelte` | Plans page — discussion-first job creation |
-| `/office` | `routes/(app)/office/+page.svelte` | Canvas-based Office map with avatar movement + worker interaction panel |
+| `/office` | `routes/(app)/office/+page.svelte` | Three.js open-floor cyberpunk Office scene with HUD overlay, avatar movement, click selection, and worker interaction panel |
 | `/jobs/[job_id]` | `routes/(app)/jobs/[job_id]/+page.svelte` | Job chat feed |
 
 Shared layout `routes/(app)/+layout.svelte` renders the persistent top bar (logo, workspace dropdown, Agents \| Plans \| Office nav) for all app routes.
 
 Shared layout `routes/(app)/agents/[worker_id]/+layout.svelte` renders the agent header and Jobs \| Settings sub-nav for agent sub-pages.
 
-### Office Canvas Modules
+### Office 3D Modules
 
-Office map rendering is split into small frontend modules under `frontend/src/lib/office/`:
+Office rendering under `frontend/src/lib/office/` is centered on one scene module plus small supporting data/input modules:
 
-- `OfficeEngine.ts` — render loop, camera, movement, collision, proximity, interaction callbacks
-- `mapConfig.ts` — tile map + desk configuration + fallback desk resolution
-- `playerController.ts` — keyboard + virtual D-pad input state
-- `tileRenderer.ts` — floor/wall tile drawing
-- `npcRenderer.ts` — worker sprite/desk rendering + labels + hit-test
-- `proximityDetector.ts` — nearest in-range worker resolution
+- `OfficeScene.ts` — Three.js renderer lifecycle, scene graph, locked follow camera, avatar movement, desk collision, raycast hover/click interaction, and animation
+- `mapConfig.ts` — logical desk-grid layout, zone metadata, desk configuration, fallback desk resolution, and world-space mapping
+- `playerController.ts` — keyboard input state with normalized X/Z movement control
 
 Interaction UI is implemented in `frontend/src/components/organisms/OfficeInteractionPanel.svelte` and reuses existing job APIs (`POST /jobs`, `POST /jobs/{id}/submit`) without adding a new worker-jobs endpoint.
+
+The Office route is a documented visual exception to the global NEXUS theme. Its source of truth is `office-demo.html`, so Office-specific components intentionally use the brighter open-floor cyan / magenta / purple cyberpunk interface from that prototype while the rest of the app remains on the standard NEXUS design system.
 
 ### Deployment Networking (Compose)
 

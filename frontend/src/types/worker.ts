@@ -8,6 +8,9 @@ export interface Worker {
 	cli_command: string;
 	workspace: string;
 	git_repo_url: string;
+	instruction_job: string;
+	instruction_plan: string;
+	instruction_discuss: string;
 	map_x: number;
 	map_y: number;
 	status: WorkerStatus;
@@ -32,4 +35,7 @@ export interface UpdateWorkerPayload {
 	cli_command?: CLICommand;
 	map_x?: number;
 	map_y?: number;
+	instruction_job?: string;
+	instruction_plan?: string;
+	instruction_discuss?: string;
 }

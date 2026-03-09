@@ -8,17 +8,28 @@
 	import { connectWS, disconnectWS } from '../stores/ws';
 	import { get } from 'svelte/store';
 
-	onMount(async () => {
+	onMount(() => {
 		const path = get(page).url.pathname;
 		if (path === '/login') return;
-		try {
-			const u = await getMe();
-			user.set(u);
-			connectWS();
-		} catch {
-			goto('/login');
-		}
-		return () => disconnectWS();
+		let cancelled = false;
+
+		void (async () => {
+			try {
+				const u = await getMe();
+				if (cancelled) return;
+				user.set(u);
+				connectWS();
+			} catch {
+				if (!cancelled) {
+					goto('/login');
+				}
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+			disconnectWS();
+		};
 	});
 </script>
 

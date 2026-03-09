@@ -80,6 +80,7 @@ func buildRouter(
 	priv.HandleFunc("/workers/{worker_id}", workerCtrl.Get).Methods(http.MethodGet)
 	priv.HandleFunc("/workers/{worker_id}", workerCtrl.Update).Methods(http.MethodPatch)
 	priv.HandleFunc("/workers/{worker_id}", workerCtrl.Delete).Methods(http.MethodDelete)
+	priv.HandleFunc("/workers/{worker_id}/instructions/reset/{field}", workerCtrl.ResetInstruction).Methods(http.MethodPost)
 	priv.HandleFunc("/workers/{worker_id}/ping", workerCtrl.Ping).Methods(http.MethodPost)
 	priv.HandleFunc("/workers/{worker_id}/plan", workerCtrl.Plan).Methods(http.MethodPost)
 

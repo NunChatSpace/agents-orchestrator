@@ -354,7 +354,7 @@ The app uses a persistent top bar for global navigation with no sidebar.
 - `/agents/{id}/jobs` — Agent job list
 - `/agents/{id}/settings` — Agent settings + health check
 - `/plans` — Plans page (discussion-first job creation)
-- `/office` — Office page (2D map interaction surface)
+- `/office` — Office page (Three.js 3D interaction scene)
 - `/jobs/{id}` — Job chat feed
 
 ### 17.1.1 Agents Page (`/`)
@@ -376,7 +376,22 @@ The home page shows agent cards filtered by the selected workspace group.
 A shared layout (`routes/(app)/agents/[worker_id]/+layout.svelte`) renders the agent header (name, status, group/workspace, delete button) and a **Jobs | Settings** sub-nav bar. Child pages:
 
 - **Jobs** (`/agents/{id}/jobs`) — job list filtered to `assigned_worker_id === id`, sorted by `updated_at DESC`. Clicking a row navigates to `/jobs/{job_id}`. **New Job** button opens a modal to dispatch a new job directly to this agent.
-- **Settings** (`/agents/{id}/settings`) — displays CLI command, last active time, workspace path, git repo URL. Includes **Run Health Check** button that calls `POST /api/v1/workers/{id}/ping`. Includes **Office Position** fields (`map_x`, `map_y`) saved via `PATCH /api/v1/workers/{id}`.
+- **Settings** (`/agents/{id}/settings`) — displays CLI command, last active time, workspace path, git repo URL. Includes **Run Health Check** button that calls `POST /api/v1/workers/{id}/ping`. Includes **Office Position** fields (`map_x`, `map_y`) saved via `PATCH /api/v1/workers/{id}`. Includes three agent-owned instruction editors:
+  - `instruction_job`
+  - `instruction_plan`
+  - `instruction_discuss`
+  - Each editor supports **Save** via `PATCH /api/v1/workers/{id}`
+  - Each editor supports per-field **Factory Reset** via `POST /api/v1/workers/{id}/instructions/reset/{field}`
+
+### 17.1.1b Instruction Channels
+
+Each worker stores three execution-channel instruction fields:
+
+- `instruction_job` — used for new job dispatch and resumed job follow-up turns
+- `instruction_discuss` — used for plan discussion turns in `/plans`
+- `instruction_plan` — used for **Generate Plan** and other prompt-generation runs such as `POST /api/v1/workers/{id}/plan`
+
+The backend owns three hardcoded factory defaults in code only. On worker creation, those defaults are copied into the worker's instruction fields. Runtime dispatch reads only the worker's stored values. Factory reset copies the relevant hardcoded default back into that worker field. There is no live shared-default table and no per-user instruction customization in v1.
 
 ### 17.1.2 Plans Page (`/plans`) — Discussion-First
 
@@ -384,14 +399,14 @@ The Plans page is a discussion-first job creation flow backed by `plan_sessions`
 
 **Plan session states:** `pending` | `completed` | `discarded`
 
-**Discussion prompt framing:** Every `/message` turn prepends a hidden scoping instruction before sending to the agent:
+**Discussion prompt framing:** Every `/message` turn prepends the worker's `instruction_discuss`, then prepends a hidden scoping instruction before sending to the agent:
 - Ask ONE focused clarifying question at a time (2–4 sentences max) if the request is vague.
 - If the user says to start, go ahead, or proceed — stop asking and provide a substantive answer immediately.
 - Do not re-ask questions already answered.
 - May use read-only shell commands (`cat`, `rg`, `grep`, `find`, `ls`, `head`, `tail`) to browse the codebase for context.
 - Must NOT write or modify files, run tests, install packages, start servers, or execute code.
 
-The `/generate` turn uses its own fixed instruction and is unaffected.
+The `/generate` turn prepends the worker's `instruction_plan`, then uses its own fixed output-shaping instruction. User-configurable instructions must not remove the built-in generation/output rules.
 
 **Plans page — list view (default):**
 
@@ -404,7 +419,7 @@ The `/generate` turn uses its own fixed instruction and is unaffected.
 1. User and the selected worker agent exchange messages in a chat feed.
 2. Agent messages are streamed via SSE (`POST /api/v1/plan-sessions/{id}/message`).
 3. When the user is satisfied, clicks **Generate Plan** (enabled after ≥ 2 messages).
-4. Backend sends the final instruction to the agent: `"Based on our discussion, write a clear, detailed task prompt. Output ONLY the prompt text."` — streamed via SSE (`POST /api/v1/plan-sessions/{id}/generate`).
+4. Backend sends the final instruction to the agent: worker `instruction_plan`, then `"Based on our discussion, write a clear, detailed task prompt. Output ONLY the prompt text."` — streamed via SSE (`POST /api/v1/plan-sessions/{id}/generate`).
 5. **Generate Plan** button shows elapsed seconds while the agent is working (`Generating… 14s`).
 6. Generated prompt fills an editable textarea. User edits if needed, then clicks **Confirm & Create Job**.
 7. `POST /api/v1/plan-sessions/{id}/complete` → session status → `completed`. Then `POST /api/v1/jobs` + `POST /api/v1/jobs/{id}/submit` → navigate to `/jobs/{id}`.
@@ -436,25 +451,36 @@ The `/generate` turn uses its own fixed instruction and is unaffected.
 
 **Auth session persistence:** The `(app)` layout calls `getMe()` directly in its own `onMount` before deciding to redirect to `/login`. This avoids a race condition where the nested layout runs before the root layout's `getMe()` has resolved, which previously caused a redirect on every page refresh.
 
-### 17.1.3 Office Page (`/office`) — 2D Interaction Map
+### 17.1.3 Office Page (`/office`) — 3D Cyberpunk Interaction Floor
 
-The Office page renders a top-down tile map via HTML5 Canvas with no game engine dependency.
+The Office page renders a code-generated Three.js open-floor office scene with no external 3D assets or game engine.
 
 Core behavior:
 
-- Worker agents appear as NPCs at desk coordinates resolved in this order:
+- The visual source of truth for `/office` is `office-demo.html`.
+- Worker agents appear as 3D desk stations at desk coordinates resolved in this order:
   1. explicit worker `map_x`/`map_y` when either is non-zero
   2. pre-configured desk mapping
   3. group-based fallback placement by registration order (`created_at`)
 - Worker visual state updates live from the existing WebSocket worker events (`allWorkers` store)
 - User avatar movement:
-  - keyboard: WASD / Arrow keys
-  - mobile: on-screen D-pad
-  - speed: 4 tiles/second
-  - collisions: walls + desk tiles
-- Proximity interaction:
-  - prompt appears when within 2 tiles of nearest worker desk
-  - `E` or click worker opens side panel
+  - keyboard: WASD / Arrow keys on the floor plane
+  - movement is secondary atmosphere, not required for core worker interaction
+  - collisions apply to desk footprints only; the scene has no wall or roof blockers
+- Interaction:
+  - click on any visible worker desk opens that worker's side panel immediately
+  - when the avatar is within approximately 3.25 scene units of a worker desk, `E` opens that nearest worker
+  - desktop-first target: mouse + keyboard in v1
+- HUD and atmosphere:
+  - fixed cyberpunk HUD overlay with corner brackets, top status bar, controls block, bottom system bar
+  - cyan / magenta / purple visual language specific to `/office`
+  - scanline and vignette overlays
+- Map presentation:
+  - camera is a locked follow camera over an open 3D floor
+  - scene uses procedural desk clusters, emissive monitors, beacon markers, ambient particles, and a walkable avatar
+  - no wall or roof geometry may block the main view
+  - office floor is divided into group zones such as `fi-backend`, `fi-frontend`, and `ib-kha`
+  - `map_x` / `map_y` remain integer desk coordinates, but are interpreted on the logical 3D desk grid
 - Interaction panel includes:
   - worker header (name, group, status, workspace)
   - active job (if present)
@@ -468,6 +494,16 @@ Core behavior:
 ### 17.2 Design System — NEXUS Theme
 
 The frontend uses a cyber-premium dark design system referred to as NEXUS.
+
+#### Office Page Exception
+
+`/office` is an explicit exception to the global NEXUS palette and typography rules.
+
+- Visual source of truth: `office-demo.html`
+- Allowed page-local palette for `/office`: cyan / magenta / purple cyberpunk system used by that demo
+- Allowed page-local typography for `/office`: monospaced HUD styling used by that demo
+- This exception applies only to the Office route and its dedicated Three.js scene / overlay components
+- All other routes continue to use the standard NEXUS theme below
 
 #### Colors
 
@@ -656,13 +692,14 @@ Do not include in v1:
 - main pane shows full history of selected job
 
 ### 22.9 Office Rendering
-- `/office` renders a tile-based 2D office map with worker NPCs
+- `/office` renders a code-generated Three.js cyberpunk office floor with 3D worker desk stations
 - worker status visuals update in real-time without page reload
 
 ### 22.10 Office Interaction
-- user can move avatar with keyboard and mobile D-pad
-- collision blocks movement through wall and desk tiles
-- proximity prompt appears within 2 tiles and `E`/click opens interaction panel
+- user can move avatar with keyboard
+- collision blocks movement through desk footprints only
+- click opens the selected worker panel from any visible desk
+- nearest worker interaction remains available via `E` when in range
 
 ### 22.11 Office Dispatch
 - New Job action from the interaction panel opens prefilled modal

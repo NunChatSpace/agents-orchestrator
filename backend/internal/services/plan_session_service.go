@@ -135,7 +135,7 @@ func (s *planSessionService) SendMessage(ctx context.Context, w http.ResponseWri
 		"User: " + content
 
 	// Stream agent reply.
-	reply, newResumeID, err := s.dispatcher.RunPlanStream(ctx, w, session.WorkerID, resumeID, framedContent)
+	reply, newResumeID, err := s.dispatcher.RunPlanStream(ctx, w, session.WorkerID, resumeID, models.WorkerInstructionFieldDiscuss, framedContent)
 	if err != nil {
 		return err
 	}
@@ -177,7 +177,7 @@ func (s *planSessionService) Generate(ctx context.Context, w http.ResponseWriter
 
 	instruction := "Based on our discussion, write a clear, detailed task prompt. Output ONLY the prompt text."
 
-	reply, newResumeID, err := s.dispatcher.RunPlanStream(ctx, w, session.WorkerID, resumeID, instruction)
+	reply, newResumeID, err := s.dispatcher.RunPlanStream(ctx, w, session.WorkerID, resumeID, models.WorkerInstructionFieldPlan, instruction)
 	if err != nil {
 		return err
 	}

@@ -44,7 +44,7 @@
 	function handleWorkerClick(worker: Worker) {
 		selectedWorker.set(worker);
 		// If the worker is busy, jump directly to the active job chat
-		if (worker.status === 'busy' || worker.status === 'pending_user' || worker.status === 'assigned') {
+		if (worker.status === 'busy' || worker.status === 'pending_user') {
 			const jobs = get(allJobs);
 			const active = jobs.find(
 				(j) =>

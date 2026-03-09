@@ -16,8 +16,8 @@ import (
 )
 
 var (
-	ErrJobNotFound      = errors.New("job not found")
-	ErrForbidden        = errors.New("forbidden")
+	ErrJobNotFound       = errors.New("job not found")
+	ErrForbidden         = errors.New("forbidden")
 	ErrInvalidTransition = errors.New("invalid status transition")
 )
 
@@ -42,12 +42,12 @@ type JobService interface {
 }
 
 type jobService struct {
-	jobRepo     repository.JobRepository
-	msgRepo     repository.MessageRepository
-	workerRepo  repository.WorkerRepository
-	scheduler   SchedulerService
-	dispatcher  DispatcherService
-	hub         WSBroadcaster
+	jobRepo    repository.JobRepository
+	msgRepo    repository.MessageRepository
+	workerRepo repository.WorkerRepository
+	scheduler  SchedulerService
+	dispatcher DispatcherService
+	hub        WSBroadcaster
 }
 
 func NewJobService(
@@ -575,6 +575,5 @@ type DispatcherService interface {
 	SetResultHandler(h JobResultHandler)
 	RunPlan(ctx context.Context, workerID uuid.UUID, task string) (string, error)
 	// RunPlanStream streams the agent reply via SSE to w. Returns the full reply text and new resume_id.
-	RunPlanStream(ctx context.Context, w http.ResponseWriter, workerID uuid.UUID, resumeID string, message string) (reply string, newResumeID string, err error)
+	RunPlanStream(ctx context.Context, w http.ResponseWriter, workerID uuid.UUID, resumeID string, field models.WorkerInstructionField, message string) (reply string, newResumeID string, err error)
 }
-
