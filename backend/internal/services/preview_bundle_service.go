@@ -58,6 +58,42 @@ func (s *previewBundleService) Create(ctx context.Context, userID uuid.UUID, req
 		return nil, fmt.Errorf("stack not found")
 	}
 
+	roleDefs := make(map[string]stackregistry.RoleDefinition, len(def.Roles))
+	for _, role := range def.Roles {
+		roleDefs[role.Role] = role
+	}
+
+	assignedWorkers := make(map[string]string, len(req.RoleOverrides))
+	for _, override := range req.RoleOverrides {
+		roleDef, ok := roleDefs[override.Role]
+		if !ok {
+			return nil, fmt.Errorf("role %q is not valid for stack %q", override.Role, req.StackID)
+		}
+		if _, exists := assignedWorkers[override.Role]; exists {
+			return nil, fmt.Errorf("duplicate role override for role %q", override.Role)
+		}
+
+		workerID, err := uuid.Parse(override.WorkerID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid worker_id for role %q", override.Role)
+		}
+
+		worker, err := s.workerRepo.GetByID(ctx, workerID)
+		if err != nil {
+			return nil, fmt.Errorf("worker not found for role override %q", override.Role)
+		}
+		if worker.GroupName != roleDef.WorkerGroup {
+			return nil, fmt.Errorf(
+				"worker group %q cannot be assigned to role %q (expected group %q)",
+				worker.GroupName,
+				override.Role,
+				roleDef.WorkerGroup,
+			)
+		}
+
+		assignedWorkers[override.Role] = workerID.String()
+	}
+
 	bundle := &models.PreviewBundle{
 		ID:      uuid.New(),
 		UserID:  userID,
@@ -68,12 +104,14 @@ func (s *previewBundleService) Create(ctx context.Context, userID uuid.UUID, req
 
 	roles := make([]*models.PreviewBundleRole, len(def.Roles))
 	for i, role := range def.Roles {
+		assignedWorkerID := nullableString(assignedWorkers[role.Role])
 		roles[i] = &models.PreviewBundleRole{
-			ID:              uuid.New(),
-			PreviewBundleID: bundle.ID,
-			Role:            role.Role,
-			WorkerGroup:     role.WorkerGroup,
-			BuildStatus:     models.PreviewBuildRoleStatusRequested,
+			ID:               uuid.New(),
+			PreviewBundleID:  bundle.ID,
+			Role:             role.Role,
+			WorkerGroup:      role.WorkerGroup,
+			AssignedWorkerID: assignedWorkerID,
+			BuildStatus:      models.PreviewBuildRoleStatusRequested,
 		}
 	}
 
@@ -154,6 +192,9 @@ func (s *previewBundleService) ReportBuild(ctx context.Context, workerID uuid.UU
 	}
 	if worker.GroupName != roleRow.WorkerGroup {
 		return nil, fmt.Errorf("worker group %q cannot report role %q", worker.GroupName, req.Role)
+	}
+	if roleRow.AssignedWorkerID != nil && *roleRow.AssignedWorkerID != workerID.String() {
+		return nil, fmt.Errorf("role %q is reserved for a different worker", req.Role)
 	}
 
 	roleStatus := models.PreviewBuildRoleStatus(req.Status)

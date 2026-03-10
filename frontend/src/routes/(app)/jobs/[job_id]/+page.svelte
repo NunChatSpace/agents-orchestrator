@@ -7,15 +7,23 @@
 	import { selectedWorker } from '../../../../stores/selectedWorker';
 	import { getJob, cancelJob, deleteJob, submitJob, finishJob } from '../../../../lib/apis/jobs';
 	import { listMessages, sendMessage } from '../../../../lib/apis/messages';
+	import { listPreviewBundles } from '../../../../lib/apis/preview';
+	import Button from '../../../../components/atoms/Button.svelte';
 	import TopBar from '../../../../components/organisms/TopBar.svelte';
 	import MessageFeed from '../../../../components/organisms/MessageFeed.svelte';
 	import ChangesPanel from '../../../../components/organisms/ChangesPanel.svelte';
 	import Composer from '../../../../components/organisms/Composer.svelte';
+	import RequestPreviewModal from '../../../../components/organisms/RequestPreviewModal.svelte';
+	import PreviewStatusPanel from '../../../../components/molecules/PreviewStatusPanel.svelte';
 	import Spinner from '../../../../components/atoms/Spinner.svelte';
+	import type { PreviewBundle } from '../../../../types/preview';
 
 	let loading = true;
 	let error = '';
 	let sending = false;
+	let previewModalOpen = false;
+	let activeBundle: PreviewBundle | undefined = undefined;
+	let previewLoadToken = 0;
 
 	$: jobId = $page.params.job_id;
 
@@ -34,10 +42,23 @@
 		}
 	}
 
+	async function loadPreviewBundle(id: string) {
+		const token = ++previewLoadToken;
+		activeBundle = undefined;
+		try {
+			const bundles = await listPreviewBundles();
+			if (token !== previewLoadToken || currentJobId !== id) return;
+			activeBundle = bundles.find((bundle) => bundle.task_id === id && bundle.status !== 'destroyed');
+		} catch {
+			// ignore — preview panel is best-effort only
+		}
+	}
+
 	let currentJobId = '';
 	$: if (jobId && jobId !== currentJobId) {
 		currentJobId = jobId;
 		load(jobId);
+		loadPreviewBundle(jobId);
 	}
 
 	onDestroy(() => {
@@ -111,6 +132,17 @@
 	function switchTab(tab: 'chat' | 'changes') {
 		activeTab = tab;
 	}
+
+	function handleBundleCreated(e: CustomEvent<PreviewBundle>) {
+		previewLoadToken += 1;
+		activeBundle = e.detail;
+		previewModalOpen = false;
+	}
+
+	async function handleBundleDestroyed() {
+		if (!jobId) return;
+		await loadPreviewBundle(jobId);
+	}
 </script>
 
 <style>
@@ -155,19 +187,6 @@
 		border-bottom-color: rgba(139,92,246,0.7);
 	}
 	.tab:hover:not(.active) { color: rgba(196,181,253,0.75); }
-	.tab-count {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		min-width: 16px;
-		height: 16px;
-		padding: 0 4px;
-		border-radius: 8px;
-		background: rgba(139,92,246,0.2);
-		font-size: 10px;
-		font-weight: 700;
-		color: rgba(167,139,250,0.9);
-	}
 	.tab-content {
 		flex: 1;
 		display: flex;
@@ -179,6 +198,46 @@
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
+	}
+
+	.preview-strip {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
+		padding: 14px 20px;
+		border-bottom: 1px solid rgba(139,92,246,0.15);
+		background: rgba(139,92,246,0.03);
+	}
+
+	.preview-strip-copy {
+		min-width: 0;
+	}
+
+	.preview-strip-title {
+		font-size: 11px;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: rgba(196,181,253,0.45);
+	}
+
+	.preview-strip-sub {
+		margin-top: 4px;
+		font-size: 12.5px;
+		line-height: 1.5;
+		color: rgba(196,181,253,0.62);
+	}
+
+	.preview-panel-wrap {
+		padding: 16px 20px 0;
+	}
+
+	@media (max-width: 640px) {
+		.preview-strip {
+			flex-direction: column;
+			align-items: stretch;
+		}
 	}
 </style>
 
@@ -192,6 +251,24 @@
 	<div class="job-shell">
 		<div class="job-inner">
 			<TopBar job={$activeJob} on:cancel={handleCancel} on:close={handleClose} on:finish={handleFinish} />
+			<div class="preview-strip">
+				<div class="preview-strip-copy">
+					<p class="preview-strip-title">Preview</p>
+					<p class="preview-strip-sub">
+						{#if activeBundle}
+							Showing bundle for stack <strong>{activeBundle.stack_id}</strong>.
+						{:else}
+							Request a preview bundle from the current job workspace state.
+						{/if}
+					</p>
+				</div>
+				<Button variant="secondary" on:click={() => (previewModalOpen = true)}>Request Preview</Button>
+			</div>
+			{#if activeBundle}
+				<div class="preview-panel-wrap">
+					<PreviewStatusPanel bundle={activeBundle} on:destroyed={handleBundleDestroyed} />
+				</div>
+			{/if}
 			<div class="tab-bar">
 				<button class="tab {activeTab === 'chat' ? 'active' : ''}" on:click={() => switchTab('chat')}>
 					Chat
@@ -222,4 +299,5 @@
 			</div>
 		</div>
 	</div>
+	<RequestPreviewModal bind:open={previewModalOpen} jobId={jobId ?? ''} on:created={handleBundleCreated} />
 {/if}

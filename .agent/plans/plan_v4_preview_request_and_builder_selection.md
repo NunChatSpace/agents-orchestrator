@@ -35,7 +35,14 @@ This plan defines the next coherent slice:
   - bundle status
   - role build status
   - assigned worker per role
-  - preview URL when present
+  - preview URL when bundle is `healthy` — format: `http://shiphide.{worker_name}.preview`
+
+### Preview URL Routing
+
+- Each agent has exactly one active preview URL at any time: `http://shiphide.{worker_name}.preview`
+- When a new preview is deployed for the same agent, the previous bundle is auto-marked `destroyed` and its runtime cleaned up after a short TTL.
+- Multiple agents may have simultaneous active previews at distinct URLs.
+- Access requires a hosts-file entry on the viewing device: `127.0.0.1 shiphide.{worker_name}.preview`
 
 ## Backend Contract Changes
 

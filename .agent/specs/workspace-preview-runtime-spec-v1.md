@@ -234,15 +234,29 @@ Rules:
 One reverse proxy routes preview traffic.
 
 #### v1 Route Strategy
-Subdomain-based routing with hosts-file management on the devices that need access.
+Subdomain-based routing keyed by **agent (worker) name**, with hosts-file management on the devices that need access.
 
-Example:
-- `bundle-123.preview.local`
+URL format:
+
+```text
+http://shiphide.{worker_name}.preview
+```
+
+Examples:
+
+- `http://shiphide.alice.preview`
+- `http://shiphide.bob.preview`
+
+`{worker_name}` is the worker's `name` field, lowercased and slugified.
 
 Rules:
-- every preview bundle gets a unique hostname
+
+- each agent has exactly one active preview URL at any time
+- the URL is stable and reused across redeployments for the same agent
+- when a new preview for an agent is deployed, the previous active bundle for that agent is automatically marked `destroyed` and its runtime is cleaned up after a short TTL
+- multiple agents can have simultaneous active previews at distinct URLs
 - v1 does not assume wildcard LAN DNS is available
-- devices without matching hosts-file entries are expected to fail to resolve preview hostnames
+- hosts-file entry required per device that needs access: `127.0.0.1 shiphide.{worker_name}.preview`
 - this limitation must be documented, not hidden
 
 ---
@@ -264,7 +278,8 @@ Rules:
 - `failed`
 
 ### 8.3 Transition Rules
-- create preview request -> bundle `pending_build`
+
+- create preview request -> bundle `pending_build`; any previously `healthy` bundle for the same agent is auto-marked `destroyed` and scheduled for TTL cleanup
 - first successful or failed role report -> bundle `building` unless terminal rules apply
 - all required roles `ready` -> bundle `ready_to_deploy`
 - any role `failed` -> bundle `failed`
@@ -273,6 +288,16 @@ Rules:
 - destroy request -> bundle `destroyed`
 
 Successful role reports must remain recorded even if another role later fails.
+
+### 8.4 Auto-Destroy on Redeploy
+When the orchestrator deploys a new preview bundle for an agent, it must:
+
+1. Find the current `healthy` bundle (if any) for that agent's worker URL.
+2. Mark it `destroyed` immediately.
+3. Schedule runtime cleanup (container teardown, proxy route removal) after a short TTL.
+4. The old bundle record remains in the database for audit history — only its runtime is removed.
+
+Only one bundle per agent may be in `healthy` state at a time.
 
 ---
 
@@ -290,14 +315,15 @@ For the current product shape, the action is expected to live on the job detail 
 ### 9.2 Orchestrator Steps
 1. Resolve the stack from the stack registry.
 2. Validate any supplied role override workers against the stack role `worker_group`.
-3. Create preview bundle state with one requested role record per stack role.
-4. Persist optional preselected worker assignment per role.
-5. Ask the required agents to build their role artifacts.
-6. Wait for worker build reports containing immutable digests.
-7. When all required role digests are present, mark bundle `ready_to_deploy`.
-8. Deploy runtime from exact digests.
-9. Run health checks.
-10. Mark bundle `healthy` or `failed`.
+3. Find any currently `healthy` bundle for the same agent and mark it `destroyed`; schedule TTL cleanup of its runtime.
+4. Create preview bundle state with one requested role record per stack role.
+5. Persist optional preselected worker assignment per role.
+6. Ask the required agents to build their role artifacts.
+7. Wait for worker build reports containing immutable digests.
+8. When all required role digests are present, mark bundle `ready_to_deploy`.
+9. Deploy runtime from exact digests at `http://shiphide.{worker_name}.preview`.
+10. Run health checks.
+11. Mark bundle `healthy` or `failed`.
 
 ### 9.3 Agent Build Rules
 - agent builds from its own local workspace state
@@ -356,6 +382,7 @@ Response must include:
 - bundle status
 - per-role build state
 - selected worker per role when explicitly provided
+- `preview_url` in format `http://shiphide.{worker_name}.preview` when bundle is `healthy`
 
 ### Worker Build Report API
 Authenticated worker reports:

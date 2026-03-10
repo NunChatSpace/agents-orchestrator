@@ -784,6 +784,20 @@ Minimum UI flow:
 - submit calls `POST /api/v1/preview-bundles`
 - response payload drives preview status rendering on the same job detail surface
 
+### Preview URL Convention
+
+Each agent (worker) has one stable preview URL:
+
+```text
+http://shiphide.{worker_name}.preview
+```
+
+- `{worker_name}` is the worker `name` field, lowercased and slugified
+- URL is reused across redeployments for the same agent
+- when a new preview is deployed for an agent, the previous `healthy` bundle is auto-marked `destroyed` and its runtime is cleaned up after a short TTL
+- multiple agents may have simultaneous active previews at distinct URLs
+- access requires a hosts-file entry per device: `127.0.0.1 shiphide.{worker_name}.preview`
+
 ### Deployment Networking (Compose)
 
 Local/LAN compose topology uses a single host-exposed port:

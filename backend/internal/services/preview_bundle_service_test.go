@@ -15,24 +15,18 @@ import (
 )
 
 func TestPreviewBundleServiceCreateAndReportBuild(t *testing.T) {
-	registry := mustLoadTestRegistry(t)
-	repo := newFakePreviewBundleRepo()
 	backendWorkerID := uuid.New()
 	frontendWorkerID := uuid.New()
-	workerRepo := fakeWorkerRepo{
-		workers: map[uuid.UUID]*models.Worker{
-			backendWorkerID: {
-				WorkerID:  backendWorkerID,
-				GroupName: "fi-backend",
-			},
-			frontendWorkerID: {
-				WorkerID:  frontendWorkerID,
-				GroupName: "fi-frontend",
-			},
+	svc := newTestPreviewBundleService(t, map[uuid.UUID]*models.Worker{
+		backendWorkerID: {
+			WorkerID:  backendWorkerID,
+			GroupName: "fi-backend",
 		},
-	}
-
-	svc := NewPreviewBundleService(repo, workerRepo, registry)
+		frontendWorkerID: {
+			WorkerID:  frontendWorkerID,
+			GroupName: "fi-frontend",
+		},
+	})
 	userID := uuid.New()
 
 	bundle, err := svc.Create(context.Background(), userID, domains.CreatePreviewBundleRequest{
@@ -47,6 +41,12 @@ func TestPreviewBundleServiceCreateAndReportBuild(t *testing.T) {
 	}
 	if len(bundle.Roles) != 2 {
 		t.Fatalf("expected 2 roles, got %d", len(bundle.Roles))
+	}
+	if role := requirePreviewRole(t, bundle.Roles, "backend"); role.AssignedWorkerID != nil {
+		t.Fatalf("expected backend role assigned_worker_id to be nil, got %v", *role.AssignedWorkerID)
+	}
+	if role := requirePreviewRole(t, bundle.Roles, "frontend"); role.AssignedWorkerID != nil {
+		t.Fatalf("expected frontend role assigned_worker_id to be nil, got %v", *role.AssignedWorkerID)
 	}
 
 	bundle, err = svc.ReportBuild(context.Background(), backendWorkerID, bundle.ID, domains.ReportPreviewBuildRequest{
@@ -81,19 +81,176 @@ func TestPreviewBundleServiceCreateAndReportBuild(t *testing.T) {
 	}
 }
 
-func TestPreviewBundleServiceRejectsWrongWorkerGroup(t *testing.T) {
-	registry := mustLoadTestRegistry(t)
-	repo := newFakePreviewBundleRepo()
-	workerID := uuid.New()
-	workerRepo := fakeWorkerRepo{
-		workers: map[uuid.UUID]*models.Worker{
-			workerID: {
-				WorkerID:  workerID,
-				GroupName: "fi-backend",
+func TestPreviewBundleServiceCreateWithRoleOverrideAndReservedWorkerCanReport(t *testing.T) {
+	backendWorkerID := uuid.New()
+	frontendWorkerID := uuid.New()
+	svc := newTestPreviewBundleService(t, map[uuid.UUID]*models.Worker{
+		backendWorkerID: {
+			WorkerID:  backendWorkerID,
+			GroupName: "fi-backend",
+		},
+		frontendWorkerID: {
+			WorkerID:  frontendWorkerID,
+			GroupName: "fi-frontend",
+		},
+	})
+	userID := uuid.New()
+
+	bundle, err := svc.Create(context.Background(), userID, domains.CreatePreviewBundleRequest{
+		StackID: "fi-webapp",
+		TaskID:  "task_789",
+		RoleOverrides: []domains.RoleOverrideRequest{
+			{
+				Role:     "backend",
+				WorkerID: backendWorkerID.String(),
 			},
 		},
+	})
+	if err != nil {
+		t.Fatalf("create preview bundle with role override: %v", err)
 	}
-	svc := NewPreviewBundleService(repo, workerRepo, registry)
+
+	backendRole := requirePreviewRole(t, bundle.Roles, "backend")
+	if backendRole.AssignedWorkerID == nil || *backendRole.AssignedWorkerID != backendWorkerID.String() {
+		t.Fatalf("expected backend role assigned_worker_id %q, got %v", backendWorkerID, backendRole.AssignedWorkerID)
+	}
+	if frontendRole := requirePreviewRole(t, bundle.Roles, "frontend"); frontendRole.AssignedWorkerID != nil {
+		t.Fatalf("expected frontend role assigned_worker_id to be nil, got %v", *frontendRole.AssignedWorkerID)
+	}
+
+	bundle, err = svc.ReportBuild(context.Background(), backendWorkerID, bundle.ID, domains.ReportPreviewBuildRequest{
+		Role:           "backend",
+		Status:         "ready",
+		ImageReference: "registry.local/fi-webapp/backend:preview",
+		ImageDigest:    "sha256:backend",
+		Metadata:       map[string]string{"workspace": "/workspaces/fi-backend1"},
+	})
+	if err != nil {
+		t.Fatalf("report backend build with reserved worker: %v", err)
+	}
+	if bundle.Status != models.PreviewBundleStatusBuilding {
+		t.Fatalf("unexpected bundle status after reserved worker report: %s", bundle.Status)
+	}
+	backendRole = requirePreviewRole(t, bundle.Roles, "backend")
+	if backendRole.AssignedWorkerID == nil || *backendRole.AssignedWorkerID != backendWorkerID.String() {
+		t.Fatalf("expected backend role assigned_worker_id to remain %q, got %v", backendWorkerID, backendRole.AssignedWorkerID)
+	}
+}
+
+func TestPreviewBundleServiceCreateRejectsInvalidRoleOverrides(t *testing.T) {
+	backendWorkerID := uuid.New()
+	frontendWorkerID := uuid.New()
+	missingWorkerID := uuid.New()
+	svc := newTestPreviewBundleService(t, map[uuid.UUID]*models.Worker{
+		backendWorkerID: {
+			WorkerID:  backendWorkerID,
+			GroupName: "fi-backend",
+		},
+		frontendWorkerID: {
+			WorkerID:  frontendWorkerID,
+			GroupName: "fi-frontend",
+		},
+	})
+	userID := uuid.New()
+
+	tests := []struct {
+		name    string
+		req     domains.CreatePreviewBundleRequest
+		wantErr string
+	}{
+		{
+			name: "role not in stack",
+			req: domains.CreatePreviewBundleRequest{
+				StackID: "fi-webapp",
+				TaskID:  "task_invalid_role",
+				RoleOverrides: []domains.RoleOverrideRequest{
+					{
+						Role:     "api",
+						WorkerID: backendWorkerID.String(),
+					},
+				},
+			},
+			wantErr: `role "api" is not valid for stack "fi-webapp"`,
+		},
+		{
+			name: "duplicate role override",
+			req: domains.CreatePreviewBundleRequest{
+				StackID: "fi-webapp",
+				TaskID:  "task_duplicate_role",
+				RoleOverrides: []domains.RoleOverrideRequest{
+					{
+						Role:     "backend",
+						WorkerID: backendWorkerID.String(),
+					},
+					{
+						Role:     "backend",
+						WorkerID: backendWorkerID.String(),
+					},
+				},
+			},
+			wantErr: `duplicate role override for role "backend"`,
+		},
+		{
+			name: "invalid worker uuid",
+			req: domains.CreatePreviewBundleRequest{
+				StackID: "fi-webapp",
+				TaskID:  "task_invalid_uuid",
+				RoleOverrides: []domains.RoleOverrideRequest{
+					{
+						Role:     "backend",
+						WorkerID: "not-a-uuid",
+					},
+				},
+			},
+			wantErr: `invalid worker_id for role "backend"`,
+		},
+		{
+			name: "worker not found",
+			req: domains.CreatePreviewBundleRequest{
+				StackID: "fi-webapp",
+				TaskID:  "task_worker_not_found",
+				RoleOverrides: []domains.RoleOverrideRequest{
+					{
+						Role:     "backend",
+						WorkerID: missingWorkerID.String(),
+					},
+				},
+			},
+			wantErr: `worker not found for role override "backend"`,
+		},
+		{
+			name: "worker group mismatch",
+			req: domains.CreatePreviewBundleRequest{
+				StackID: "fi-webapp",
+				TaskID:  "task_group_mismatch",
+				RoleOverrides: []domains.RoleOverrideRequest{
+					{
+						Role:     "backend",
+						WorkerID: frontendWorkerID.String(),
+					},
+				},
+			},
+			wantErr: `worker group "fi-frontend" cannot be assigned to role "backend" (expected group "fi-backend")`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := svc.Create(context.Background(), userID, tt.req); err == nil || err.Error() != tt.wantErr {
+				t.Fatalf("expected error %q, got %v", tt.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestPreviewBundleServiceRejectsWrongWorkerGroup(t *testing.T) {
+	workerID := uuid.New()
+	svc := newTestPreviewBundleService(t, map[uuid.UUID]*models.Worker{
+		workerID: {
+			WorkerID:  workerID,
+			GroupName: "fi-backend",
+		},
+	})
 	userID := uuid.New()
 
 	bundle, err := svc.Create(context.Background(), userID, domains.CreatePreviewBundleRequest{
@@ -112,6 +269,54 @@ func TestPreviewBundleServiceRejectsWrongWorkerGroup(t *testing.T) {
 	}); err == nil {
 		t.Fatalf("expected worker-group mismatch error")
 	}
+}
+
+func TestPreviewBundleServiceRejectsReportFromNonReservedWorker(t *testing.T) {
+	reservedWorkerID := uuid.New()
+	otherWorkerID := uuid.New()
+	svc := newTestPreviewBundleService(t, map[uuid.UUID]*models.Worker{
+		reservedWorkerID: {
+			WorkerID:  reservedWorkerID,
+			GroupName: "fi-backend",
+		},
+		otherWorkerID: {
+			WorkerID:  otherWorkerID,
+			GroupName: "fi-backend",
+		},
+	})
+	userID := uuid.New()
+
+	bundle, err := svc.Create(context.Background(), userID, domains.CreatePreviewBundleRequest{
+		StackID: "fi-webapp",
+		TaskID:  "task_reserved_worker",
+		RoleOverrides: []domains.RoleOverrideRequest{
+			{
+				Role:     "backend",
+				WorkerID: reservedWorkerID.String(),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("create preview bundle with reserved worker: %v", err)
+	}
+
+	if _, err := svc.ReportBuild(context.Background(), otherWorkerID, bundle.ID, domains.ReportPreviewBuildRequest{
+		Role:           "backend",
+		Status:         "ready",
+		ImageReference: "registry.local/fi-webapp/backend:preview",
+		ImageDigest:    "sha256:backend",
+	}); err == nil || err.Error() != `role "backend" is reserved for a different worker` {
+		t.Fatalf("expected reserved-worker error, got %v", err)
+	}
+}
+
+func newTestPreviewBundleService(t *testing.T, workers map[uuid.UUID]*models.Worker) PreviewBundleService {
+	t.Helper()
+
+	registry := mustLoadTestRegistry(t)
+	repo := newFakePreviewBundleRepo()
+	workerRepo := fakeWorkerRepo{workers: workers}
+	return NewPreviewBundleService(repo, workerRepo, registry)
 }
 
 func mustLoadTestRegistry(t *testing.T) *stackregistry.Registry {
@@ -378,6 +583,18 @@ func cloneManifest(manifest *models.PreviewBuildManifest) *models.PreviewBuildMa
 		copy.ErrorMessage = &value
 	}
 	return &copy
+}
+
+func requirePreviewRole(t *testing.T, roles []domains.PreviewBundleRoleResponse, role string) domains.PreviewBundleRoleResponse {
+	t.Helper()
+
+	for _, item := range roles {
+		if item.Role == role {
+			return item
+		}
+	}
+	t.Fatalf("role %q not found", role)
+	return domains.PreviewBundleRoleResponse{}
 }
 
 var _ repository.PreviewBundleRepository = (*fakePreviewBundleRepo)(nil)

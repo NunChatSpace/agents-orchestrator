@@ -8,8 +8,14 @@ import (
 )
 
 type CreatePreviewBundleRequest struct {
-	StackID string `json:"stack_id"`
-	TaskID  string `json:"task_id"`
+	StackID       string                `json:"stack_id"`
+	TaskID        string                `json:"task_id"`
+	RoleOverrides []RoleOverrideRequest `json:"role_overrides,omitempty"`
+}
+
+type RoleOverrideRequest struct {
+	Role     string `json:"role"`
+	WorkerID string `json:"worker_id"`
 }
 
 type ReportPreviewBuildRequest struct {
