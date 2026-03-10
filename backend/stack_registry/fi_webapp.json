@@ -1,0 +1,27 @@
+{
+  "stack_id": "fi-webapp",
+  "display_name": "FI Webapp",
+  "deployment_template": "subdomain-preview",
+  "roles": [
+    {
+      "role": "backend",
+      "worker_group": "fi-backend",
+      "service_name": "backend",
+      "healthcheck_path": "/healthz",
+      "required_image_labels": {
+        "preview.role": "backend",
+        "preview.stack": "fi-webapp"
+      }
+    },
+    {
+      "role": "frontend",
+      "worker_group": "fi-frontend",
+      "service_name": "frontend",
+      "healthcheck_path": "/",
+      "required_image_labels": {
+        "preview.role": "frontend",
+        "preview.stack": "fi-webapp"
+      }
+    }
+  ]
+}

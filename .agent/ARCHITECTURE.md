@@ -15,6 +15,7 @@ project/
 │   │   ├── repository/    # Data access layer
 │   │   ├── models/        # Database entities
 │   │   ├── domains/       # Response/Request DTOs
+│   │   ├── stackregistry/ # File-based runtime stack definitions
 │   │   ├── views/         # HTTP response helpers
 │   │   └── utils/         # Shared utilities
 │   ├── migrations/        # SQL migration files
@@ -675,6 +676,38 @@ Schema change: migration `008_worker_map_position.sql` adds `workers.map_x` and 
 | POST | `/api/v1/plan-sessions/{id}/complete` | `PlanSessionController.Complete` | Mark completed |
 | POST | `/api/v1/plan-sessions/{id}/discard` | `PlanSessionController.Discard` | Soft-delete session |
 
+### API Endpoints — Preview Runtime
+
+| Method | Path | Handler | Notes |
+| --- | --- | --- | --- |
+| GET | `/api/v1/preview-stacks` | `PreviewBundleController.ListStacks` | List file-based stack registry entries |
+| GET | `/api/v1/preview-bundles` | `PreviewBundleController.List` | List preview bundles for current user |
+| POST | `/api/v1/preview-bundles` | `PreviewBundleController.Create` | Create preview bundle from `{ stack_id, task_id, role_overrides[] }` |
+| GET | `/api/v1/preview-bundles/{bundle_id}` | `PreviewBundleController.Get` | Get bundle detail, role states, manifest history |
+| POST | `/api/v1/preview-bundles/{bundle_id}/destroy` | `PreviewBundleController.Destroy` | Mark bundle destroyed; cleanup hook remains explicit |
+| POST | `/api/v1/preview-bundles/{bundle_id}/build-reports` | `PreviewBundleController.ReportBuild` | Worker-authenticated role build callback |
+
+Preview runtime is intentionally split into two contracts:
+
+- user/session-authenticated APIs create, inspect, and destroy preview bundles
+- worker-key-authenticated callbacks report per-role image artifacts back to the orchestrator
+
+### PreviewBundleService
+
+`PreviewBundleService` manages preview-bundle state and stack-registry resolution.
+
+Responsibilities:
+
+- load stack definitions from a file-based registry in the orchestrator repo
+- create bundle rows plus one requested role row per required stack role
+- validate optional per-role worker overrides at bundle creation time
+- persist preselected builder worker assignment per role when explicitly chosen
+- validate that worker build reports match the configured role `worker_group`
+- record append-only build manifests per reported artifact
+- move bundle state through `pending_build -> building -> ready_to_deploy -> failed -> destroyed`
+
+This service does not fake runtime deployment. In the current slice, it owns the persisted contract needed before worker-side Docker build/push execution and preview deploy orchestration are added.
+
 ### DispatcherService
 
 `DispatcherService` (in `services/dispatcher_service.go`) manages all CLI subprocess execution.
@@ -720,6 +753,36 @@ Office rendering under `frontend/src/lib/office/` is centered on one scene modul
 Interaction UI is implemented in `frontend/src/components/organisms/OfficeInteractionPanel.svelte` and reuses existing job APIs (`POST /jobs`, `POST /jobs/{id}/submit`) without adding a new worker-jobs endpoint.
 
 The Office route is a documented visual exception to the global NEXUS theme. Its source of truth is `office-demo.html`, so Office-specific components intentionally use the brighter open-floor cyan / magenta / purple cyberpunk interface from that prototype while the rest of the app remains on the standard NEXUS design system.
+
+### Stack Registry
+
+Previewable app stacks are defined in a file-based registry stored with the backend codebase, not in the database.
+
+Each stack entry defines:
+
+- `stack_id`
+- `display_name`
+- `deployment_template`
+- required roles such as `frontend` and `backend`
+- per-role worker group mapping
+- per-role service name
+- per-role healthcheck path
+- required image labels
+
+This keeps preview bundle assembly versioned with orchestrator code while avoiding a mutable singleton config table.
+
+### Frontend Preview Flow
+
+Frontend preview request is expected to live on the job detail page rather than a global admin page.
+
+Minimum UI flow:
+
+- job detail page renders a **Request Preview** action
+- modal fetches `GET /api/v1/preview-stacks`
+- modal renders one worker selector per required role
+- worker options come from the existing worker list filtered by the role's configured `worker_group`
+- submit calls `POST /api/v1/preview-bundles`
+- response payload drives preview status rendering on the same job detail surface
 
 ### Deployment Networking (Compose)
 

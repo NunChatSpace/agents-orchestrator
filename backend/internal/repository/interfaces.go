@@ -101,3 +101,12 @@ type PlanSessionRepository interface {
 	AddMessage(ctx context.Context, msg *models.PlanMessage) error
 	ListMessages(ctx context.Context, sessionID uuid.UUID) ([]*models.PlanMessage, error)
 }
+
+type PreviewBundleRepository interface {
+	Create(ctx context.Context, bundle *models.PreviewBundle, roles []*models.PreviewBundleRole) error
+	GetByID(ctx context.Context, id uuid.UUID) (*models.PreviewBundle, []*models.PreviewBundleRole, []*models.PreviewBuildManifest, error)
+	ListByUser(ctx context.Context, userID uuid.UUID) ([]*models.PreviewBundle, error)
+	RecordBuildManifest(ctx context.Context, manifest *models.PreviewBuildManifest, roleStatus models.PreviewBuildRoleStatus, workerID uuid.UUID) error
+	UpdateStatus(ctx context.Context, id uuid.UUID, status models.PreviewBundleStatus) error
+	MarkDestroyed(ctx context.Context, id uuid.UUID) error
+}

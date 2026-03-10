@@ -717,7 +717,95 @@ Do not include in v1:
 
 ---
 
-## 23. Open Questions for v2
+## 23. Preview Bundles (Manual Approval Runtime)
+
+Preview bundles are a manual approval workflow separate from the job chat loop.
+
+### 23.1 Main Rules
+- requesting a preview must not require a Git commit or Git push first
+- preview artifacts are built from the worker's current local workspace state, including uncommitted changes
+- preview creation is manual only; it must not trigger automatically on every job update
+- approval of a preview does not imply code was committed or pushed
+
+### 23.2 Bundle Model
+A preview bundle owns:
+- `bundle_id`
+- `stack_id`
+- `task_id`
+- bundle `status`
+- per-role build state
+- optional `preview_url`
+
+For the current web-app stack shape, required roles are:
+- `frontend`
+- `backend`
+
+### 23.3 Stack Registry
+The orchestrator backend owns a file-based stack registry.
+
+Each stack definition must declare:
+- `stack_id`
+- required roles
+- worker group mapping per role
+- deployment template / service names
+- health checks
+
+### 23.4 Request Preview UI
+Preview request is a user-facing action initiated from the job detail page.
+
+Rules:
+- the job detail page shows a **Request Preview** button
+- clicking the button opens a modal
+- the modal shows one worker selector per required preview role
+- each selector is filtered to workers in that role's configured `worker_group`
+- each selector may be left unset so the orchestrator can auto-pick later
+
+For the current web-app stack shape, the preview roles are:
+- `backend`
+- `frontend`
+
+### 23.5 Build Reporting
+Workers report preview role builds back to the orchestrator with:
+- `bundle_id`
+- `role`
+- `status`
+- `image_reference`
+- `image_digest`
+- build `metadata`
+
+Successful preview deployment must use immutable image digests, not mutable tags.
+
+### 23.6 Bundle States
+- `pending_build`
+- `building`
+- `ready_to_deploy`
+- `deploying`
+- `healthy`
+- `failed`
+- `destroyed`
+
+### 23.7 Role Build States
+- `requested`
+- `ready`
+- `failed`
+
+### 23.8 v1 Routing
+Preview routing uses subdomains in v1.
+
+Important limitation:
+- v1 assumes hosts-file management on the devices that need preview access
+- v1 does not assume wildcard LAN DNS is already available
+
+### 23.9 Acceptance Additions
+- user can request a preview bundle without committing or pushing code first
+- user can choose one builder worker per required role from the request modal
+- orchestrator records one requested role entry per required stack role
+- successful role reports remain visible even if another role fails
+- bundle becomes `ready_to_deploy` only after all required role digests are reported
+
+---
+
+## 24. Open Questions for v2
 Not part of v1, but likely future topics:
 - should one group have weighted worker selection instead of LRU?
 - should a job be reassigned if a worker becomes offline?

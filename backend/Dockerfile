@@ -13,6 +13,7 @@ RUN npm install -g @anthropic-ai/claude-code @openai/codex
 
 COPY --from=builder /app/server /server
 COPY --from=builder /app/migrations /migrations
+COPY --from=builder /app/stack_registry /stack_registry
 
 # Workspace directories are mounted at runtime via docker-compose bind mounts.
 # Each worker's workspace is mounted at /workspaces/<worker-name>.

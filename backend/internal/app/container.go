@@ -2,10 +2,12 @@ package app
 
 import (
 	"net/http"
+	"os"
 
 	"github.com/chatchawan/agent-orchestrator/internal/controllers"
 	"github.com/chatchawan/agent-orchestrator/internal/repository"
 	"github.com/chatchawan/agent-orchestrator/internal/services"
+	"github.com/chatchawan/agent-orchestrator/internal/stackregistry"
 	"github.com/chatchawan/agent-orchestrator/internal/ws"
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/dig"
@@ -26,6 +28,10 @@ func BuildContainer() (*dig.Container, error) {
 		repository.NewJobRepo,
 		repository.NewMessageRepo,
 		repository.NewPlanSessionRepo,
+		repository.NewPreviewBundleRepo,
+
+		// File-based stack registry
+		provideStackRegistry,
 
 		// WS hub — provide both concrete *ws.Hub and services.WSBroadcaster
 		ws.NewHub,
@@ -38,6 +44,7 @@ func BuildContainer() (*dig.Container, error) {
 		services.NewJobService,
 		services.NewWorkerService,
 		services.NewPlanSessionService,
+		services.NewPreviewBundleService,
 
 		// Controllers
 		controllers.NewAuthController,
@@ -45,6 +52,7 @@ func BuildContainer() (*dig.Container, error) {
 		controllers.NewMessageController,
 		controllers.NewWorkerController,
 		controllers.NewPlanSessionController,
+		controllers.NewPreviewBundleController,
 
 		// Router
 		provideRouter,
@@ -95,6 +103,11 @@ func provideRouter(
 	msgCtrl *controllers.MessageController,
 	workerCtrl *controllers.WorkerController,
 	planCtrl *controllers.PlanSessionController,
+	previewCtrl *controllers.PreviewBundleController,
 ) http.Handler {
-	return buildRouter(authSvc, workerRepo, hub, authCtrl, jobCtrl, msgCtrl, workerCtrl, planCtrl)
+	return buildRouter(authSvc, workerRepo, hub, authCtrl, jobCtrl, msgCtrl, workerCtrl, planCtrl, previewCtrl)
+}
+
+func provideStackRegistry() (*stackregistry.Registry, error) {
+	return stackregistry.LoadFromDir(os.Getenv("STACK_REGISTRY_DIR"))
 }

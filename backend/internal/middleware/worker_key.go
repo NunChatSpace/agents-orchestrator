@@ -1,10 +1,12 @@
 package middleware
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"net/http"
 
+	"github.com/chatchawan/agent-orchestrator/internal/models"
 	"github.com/chatchawan/agent-orchestrator/internal/repository"
 	"github.com/chatchawan/agent-orchestrator/internal/views"
 )
@@ -26,8 +28,8 @@ func RequireWorkerKey(workerRepo repository.WorkerRepository) func(http.Handler)
 				views.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid worker key", requestID(r))
 				return
 			}
-			_ = worker // available if needed downstream via context
-			next.ServeHTTP(w, r)
+			ctx := context.WithValue(r.Context(), WorkerContextKey, worker)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
@@ -35,4 +37,9 @@ func RequireWorkerKey(workerRepo repository.WorkerRepository) func(http.Handler)
 func sha256Hex(s string) string {
 	h := sha256.Sum256([]byte(s))
 	return fmt.Sprintf("%x", h)
+}
+
+func WorkerFromContext(ctx context.Context) *models.Worker {
+	worker, _ := ctx.Value(WorkerContextKey).(*models.Worker)
+	return worker
 }

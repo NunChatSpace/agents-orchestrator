@@ -150,6 +150,7 @@ All backend env vars are set in `docker-compose.yml`. Key ones:
 | `FRONTEND_ORIGIN` | `http://localhost:5174` | CORS allowed origin |
 | `VITE_BACKEND_URL` | *(empty)* | Leave empty for same-origin `/api` via proxy. Set only if bypassing proxy. |
 | `WORKSPACES_PATH` | — | **Required.** Host path bind-mounted to `/workspaces`; also used by the frontend for VSCode deep links |
+| `STACK_REGISTRY_DIR` | `./stack_registry` | Optional override for the file-based preview stack registry loaded by the backend |
 
 ---
 

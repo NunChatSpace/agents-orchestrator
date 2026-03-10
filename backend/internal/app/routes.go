@@ -23,6 +23,7 @@ func buildRouter(
 	msgCtrl *controllers.MessageController,
 	workerCtrl *controllers.WorkerController,
 	planCtrl *controllers.PlanSessionController,
+	previewCtrl *controllers.PreviewBundleController,
 ) http.Handler {
 	r := mux.NewRouter()
 
@@ -94,6 +95,13 @@ func buildRouter(
 	priv.HandleFunc("/plan-sessions/{id}/complete", planCtrl.Complete).Methods(http.MethodPost)
 	priv.HandleFunc("/plan-sessions/{id}/discard", planCtrl.Discard).Methods(http.MethodPost)
 
+	// Preview runtime
+	priv.HandleFunc("/preview-stacks", previewCtrl.ListStacks).Methods(http.MethodGet)
+	priv.HandleFunc("/preview-bundles", previewCtrl.List).Methods(http.MethodGet)
+	priv.HandleFunc("/preview-bundles", previewCtrl.Create).Methods(http.MethodPost)
+	priv.HandleFunc("/preview-bundles/{bundle_id}", previewCtrl.Get).Methods(http.MethodGet)
+	priv.HandleFunc("/preview-bundles/{bundle_id}/destroy", previewCtrl.Destroy).Methods(http.MethodPost)
+
 	// WebSocket — registered at root (not under /api/v1) to match frontend expectation.
 	wsHandler := middleware.RequireSession(authSvc)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user := middleware.UserFromContext(r.Context())
@@ -105,6 +113,7 @@ func buildRouter(
 	workerRoute := api.NewRoute().Subrouter()
 	workerRoute.Use(middleware.RequireWorkerKey(workerRepo))
 	workerRoute.HandleFunc("/workers/reply", workerCtrl.Reply).Methods(http.MethodPost)
+	workerRoute.HandleFunc("/preview-bundles/{bundle_id}/build-reports", previewCtrl.ReportBuild).Methods(http.MethodPost)
 
 	return r
 }
