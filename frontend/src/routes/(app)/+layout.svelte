@@ -44,6 +44,7 @@
 
 	$: agentsActive = $page.url.pathname === '/' || $page.url.pathname.startsWith('/agents');
 	$: plansActive = $page.url.pathname.startsWith('/plans');
+	$: deploysActive = $page.url.pathname.startsWith('/deploys');
 	$: officeActive = $page.url.pathname.startsWith('/office');
 
 	// Workspace dropdown state
@@ -124,6 +125,7 @@
 			<nav class="top-nav">
 				<a class="nav-link" class:active={agentsActive} href="/">Agents</a>
 				<a class="nav-link" class:active={plansActive} href="/plans">Plans</a>
+				<a class="nav-link" class:active={deploysActive} href="/deploys">Deploys</a>
 				<a class="nav-link" class:active={officeActive} href="/office">Office</a>
 			</nav>
 			<div class="top-bar-right">

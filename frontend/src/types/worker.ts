@@ -6,6 +6,7 @@ export interface Worker {
 	group_name: string;
 	name: string;
 	cli_command: string;
+	build_command?: string;
 	workspace: string;
 	git_repo_url: string;
 	instruction_job: string;
@@ -33,6 +34,7 @@ export interface PingResult {
 
 export interface UpdateWorkerPayload {
 	cli_command?: CLICommand;
+	build_command?: string;
 	map_x?: number;
 	map_y?: number;
 	instruction_job?: string;

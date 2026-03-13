@@ -522,6 +522,10 @@ func (r fakeWorkerRepo) UpdateCLICommand(context.Context, uuid.UUID, string) err
 	panic("unexpected call")
 }
 
+func (r fakeWorkerRepo) UpdateBuildCommand(context.Context, uuid.UUID, string) error {
+	panic("unexpected call")
+}
+
 func (r fakeWorkerRepo) UpdateMapPosition(context.Context, uuid.UUID, int, int) error {
 	panic("unexpected call")
 }

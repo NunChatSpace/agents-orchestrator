@@ -346,7 +346,7 @@ The app uses a persistent top bar for global navigation with no sidebar.
 
 - Logo (`◈ NEXUS`) — links to `/`
 - Workspace dropdown — one entry per unique `group_name` derived from `allWorkers`; updates `selectedGroup` store; persists across navigation
-- Nav links: **Agents** (→ `/`, active when path is `/` or starts with `/agents`) | **Plans** (→ `/plans`, active when path starts with `/plans`) | **Office** (→ `/office`, active when path starts with `/office`)
+- Nav links: **Agents** (→ `/`, active when path is `/` or starts with `/agents`) | **Plans** (→ `/plans`, active when path starts with `/plans`) | **Deploys** (→ `/deploys`, active when path starts with `/deploys`) | **Office** (→ `/office`, active when path starts with `/office`)
 
 **Pages:**
 
@@ -354,6 +354,7 @@ The app uses a persistent top bar for global navigation with no sidebar.
 - `/agents/{id}/jobs` — Agent job list
 - `/agents/{id}/settings` — Agent settings + health check
 - `/plans` — Plans page (discussion-first job creation)
+- `/deploys` — Deployments page (deployment plan creation + lifecycle management)
 - `/office` — Office page (Three.js 3D interaction scene)
 - `/jobs/{id}` — Job chat feed
 
@@ -376,12 +377,16 @@ The home page shows agent cards filtered by the selected workspace group.
 A shared layout (`routes/(app)/agents/[worker_id]/+layout.svelte`) renders the agent header (name, status, group/workspace, delete button) and a **Jobs | Settings** sub-nav bar. Child pages:
 
 - **Jobs** (`/agents/{id}/jobs`) — job list filtered to `assigned_worker_id === id`, sorted by `updated_at DESC`. Clicking a row navigates to `/jobs/{job_id}`. **New Job** button opens a modal to dispatch a new job directly to this agent.
-- **Settings** (`/agents/{id}/settings`) — displays CLI command, last active time, workspace path, git repo URL. Includes **Run Health Check** button that calls `POST /api/v1/workers/{id}/ping`. Includes **Office Position** fields (`map_x`, `map_y`) saved via `PATCH /api/v1/workers/{id}`. Includes three agent-owned instruction editors:
+- **Settings** (`/agents/{id}/settings`) — displays CLI command, last active time, workspace path, git repo URL. Includes **Run Health Check** button that calls `POST /api/v1/workers/{id}/ping`. Includes **Office Position** fields (`map_x`, `map_y`) saved via `PATCH /api/v1/workers/{id}`. Includes a **Build Command** field (`build_command`) saved via `PATCH /api/v1/workers/{id}`. Includes three agent-owned instruction editors:
   - `instruction_job`
   - `instruction_plan`
   - `instruction_discuss`
   - Each editor supports **Save** via `PATCH /api/v1/workers/{id}`
   - Each editor supports per-field **Factory Reset** via `POST /api/v1/workers/{id}/instructions/reset/{field}`
+
+### 17.1.1a Build Command
+
+`build_command` is a freeform shell command stored on the worker that the build agent runs to produce the preview Docker image. Use `{image}` as a placeholder for the auto-generated image reference (e.g. `docker build -f backend/Dockerfile -t {image} backend`). When empty, the build agent autonomously discovers the build method from the workspace. Saved via `PATCH /api/v1/workers/{id}` with field `build_command`.
 
 ### 17.1.1b Instruction Channels
 
@@ -450,6 +455,37 @@ The `/generate` turn prepends the worker's `instruction_plan`, then uses its own
 - `proxy_http_version 1.1` and `Connection ''` (keeps connection alive)
 
 **Auth session persistence:** The `(app)` layout calls `getMe()` directly in its own `onMount` before deciding to redirect to `/login`. This avoids a race condition where the nested layout runs before the root layout's `getMe()` has resolved, which previously caused a redirect on every page refresh.
+
+### 17.1.2A Deployments Page (`/deploys`) — Deployment Plans
+
+The Deployments page manages named preview deployment plans backed by `deployment_plans`.
+
+**List view:**
+
+- Shows all deployment plans for the current user.
+- Plans are sorted with `running` first, then `deploying` / `pending`, then `failed` / `stopped`.
+- While any plan is `pending` or `deploying`, the page polls every 5 seconds. Polling stops when all plans are terminal (`running`, `failed`, `stopped`).
+- Empty state copy: `"No deployment plans yet."`
+
+**Create plan modal:**
+
+- Opened from the **New Plan** button.
+- Uses `GET /api/v1/preview-stacks` for stack definitions.
+- Required fields:
+  - `name` — slug validation `[a-z0-9-]{1,40}` with inline error before submit
+  - `stack_id`
+  - `build_mode` = `fresh | latest`
+  - one selected worker per required role
+- Role worker pickers are filtered by each stack role's `worker_group`.
+- Submit stays disabled until all required fields are valid and filled.
+
+**Plan cards:**
+
+- Show plan name, plan status badge, stack, build mode, and per-role build/deploy status badges.
+- Show preview URL link only when plan status is `running`.
+- **Stop** is visible for `pending`, `deploying`, `running`.
+- **Delete** is visible for `failed`, `stopped`.
+- Stop and Delete both require confirmation before the request is sent.
 
 ### 17.1.3 Office Page (`/office`) — 3D Cyberpunk Interaction Floor
 
@@ -717,9 +753,9 @@ Do not include in v1:
 
 ---
 
-## 23. Preview Bundles (Manual Approval Runtime)
+## 23. Preview Runtime (Legacy Preview Bundles + Deployment Plans)
 
-Preview bundles are a manual approval workflow separate from the job chat loop.
+The preview runtime is a manual approval workflow separate from the job chat loop.
 
 ### 23.1 Main Rules
 - requesting a preview must not require a Git commit or Git push first
@@ -727,13 +763,26 @@ Preview bundles are a manual approval workflow separate from the job chat loop.
 - preview creation is manual only; it must not trigger automatically on every job update
 - approval of a preview does not imply code was committed or pushed
 
-### 23.2 Bundle Model
+### 23.2 Runtime Models
+`preview_bundles` remain in the backend as the earlier prototype record set.
+
 A preview bundle owns:
 - `bundle_id`
 - `stack_id`
 - `task_id`
 - bundle `status`
 - per-role build state
+- optional `preview_url`
+
+`deployment_plans` are the canonical preview runtime path going forward.
+
+A deployment plan owns:
+- `plan_id`
+- `name` (slug)
+- `stack_id`
+- `build_mode`
+- plan `status`
+- per-role selected worker + build state
 - optional `preview_url`
 
 For the current web-app stack shape, required roles are:
@@ -750,23 +799,59 @@ Each stack definition must declare:
 - deployment template / service names
 - health checks
 
-### 23.4 Request Preview UI
-Preview request is a user-facing action initiated from the job detail page.
+### 23.4 Canonical Preview UI
+The canonical user-facing preview flow uses:
+- the Agents page to trigger per-worker image builds
+- the Deployments page to create and manage named deployment plans
+
+Legacy note:
+- the older job-detail preview bundle flow remains documented for the prototype tables and endpoints, but it is no longer the primary preview runtime path
 
 Rules:
-- the job detail page shows a **Request Preview** button
-- clicking the button opens a modal
-- the modal shows one worker selector per required preview role
-- each selector is filtered to workers in that role's configured `worker_group`
-- each selector may be left unset so the orchestrator can auto-pick later
+- the Deployments page shows a **New Plan** action
+- creating a plan requires:
+  - plan slug name
+  - stack
+  - build mode (`fresh` or `latest`)
+  - one selected worker per required role
+- each role selector is filtered to workers in that role's configured `worker_group`
+- plan routing uses `http://shiphide.{plan-name}.preview`
 
 For the current web-app stack shape, the preview roles are:
 - `backend`
 - `frontend`
 
+### 23.4A Agent Card Build Trigger (Phase 12)
+Phase 12 adds the worker build trigger that feeds the deployment-plan runtime.
+
+Rules:
+- an agent card shows a **Build** button only when that worker currently owns an active job
+- active-job gating is derived from the job list: a job assigned to that worker with status `assigned`, `busy`, or `pending_user`
+- the build trigger must not rely on raw worker runtime status alone, because worker runtime status does not expose `assigned`
+- clicking **Build** opens an inline mode picker on the card
+- mode options are:
+  - `fresh` = force a new build from the worker's current workspace state
+  - `latest` = reuse the worker's most recent `ready` build for that stack role; if none exists, a fresh build is triggered
+- confirming the picker calls `POST /api/v1/workers/{worker_id}/builds`
+- the agent card shows the worker's latest build inline with:
+  - build status badge
+  - truncated image reference
+  - relative time
+
+Phase 12 temporary mapping assumption:
+- `fi-backend` → `{ stack_id: 'fi-web-app', role: 'backend' }`
+- `fi-frontend` → `{ stack_id: 'fi-web-app', role: 'frontend' }`
+- any unmapped worker group keeps the Build button disabled with a tooltip that build is not supported for that group yet
+
 ### 23.5 Build Reporting
-Workers report preview role builds back to the orchestrator with:
-- `bundle_id`
+Workers report preview role builds back to the orchestrator through `worker_builds`.
+
+That build record can then be used by:
+- legacy `preview_bundles`
+- canonical `deployment_plans`
+
+Reported fields include:
+- `worker_build_id`
 - `role`
 - `status`
 - `image_reference`
@@ -775,7 +860,14 @@ Workers report preview role builds back to the orchestrator with:
 
 Successful preview deployment must use immutable image digests, not mutable tags.
 
-### 23.6 Bundle States
+### 23.6 Deployment Plan States
+- `pending`
+- `deploying`
+- `running`
+- `failed`
+- `stopped`
+
+### 23.7 Legacy Preview Bundle States
 - `pending_build`
 - `building`
 - `ready_to_deploy`
@@ -784,20 +876,27 @@ Successful preview deployment must use immutable image digests, not mutable tags
 - `failed`
 - `destroyed`
 
-### 23.7 Role Build States
+### 23.8 Role Build States
 - `requested`
 - `ready`
 - `failed`
 
-### 23.8 v1 Routing
+Deployment plan role state also tracks:
+- `pending`
+- `ready`
+- `failed`
+
+### 23.9 v1 Routing
 Preview routing uses subdomains in v1.
 
 Important limitation:
 - v1 assumes hosts-file management on the devices that need preview access
 - v1 does not assume wildcard LAN DNS is already available
 
-### 23.9 Acceptance Additions
-- user can request a preview bundle without committing or pushing code first
+### 23.10 Acceptance Additions
+- user can request a preview runtime without committing or pushing code first
+- deployment plans are the canonical preview runtime path
+- preview bundles remain in the backend as legacy prototype data, not the primary runtime path
 - user can choose one builder worker per required role from the request modal
 - orchestrator records one requested role entry per required stack role
 - successful role reports remain visible even if another role fails

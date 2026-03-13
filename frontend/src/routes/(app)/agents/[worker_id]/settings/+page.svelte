@@ -28,6 +28,10 @@
 	let positionError = '';
 	let positionMessage = '';
 	let positionWorkerId = '';
+	let buildCommandDraft = '';
+	let savingBuildCommand = false;
+	let buildCommandMessage = '';
+	let buildCommandError = '';
 	let workerDrafts: Record<InstructionField, string> = {
 		job: '',
 		plan: '',
@@ -55,6 +59,9 @@
 		mapY = String($selectedWorker.map_y ?? 0);
 		positionError = '';
 		positionMessage = '';
+		buildCommandDraft = $selectedWorker.build_command ?? '';
+		buildCommandMessage = '';
+		buildCommandError = '';
 		workerDrafts = workerToDrafts($selectedWorker);
 		workerMessages = emptyFieldMessages();
 		workerErrors = emptyFieldMessages();
@@ -68,6 +75,24 @@
 		const hrs = Math.floor(mins / 60);
 		if (hrs < 24) return `${hrs}h ago`;
 		return `${Math.floor(hrs / 24)}d ago`;
+	}
+
+	async function saveBuildCommand() {
+		if (!$selectedWorker) return;
+		savingBuildCommand = true;
+		buildCommandMessage = '';
+		buildCommandError = '';
+		try {
+			const updated = await updateWorker($selectedWorker.worker_id, { build_command: buildCommandDraft });
+			selectedWorker.set(updated);
+			upsertWorker(updated);
+			buildCommandDraft = updated.build_command ?? '';
+			buildCommandMessage = 'Build command saved';
+		} catch (e: unknown) {
+			buildCommandError = e instanceof Error ? e.message : 'Failed to save build command';
+		} finally {
+			savingBuildCommand = false;
+		}
 	}
 
 	async function runPing() {
@@ -206,6 +231,34 @@
 					<div class="info-value mono">{$selectedWorker.git_repo_url || '—'}</div>
 				</div>
 			</div>
+		</div>
+
+		<!-- Build Command -->
+		<div class="section">
+			<div class="section-header">
+				<div class="section-title">
+					<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+					</svg>
+					Build Command
+				</div>
+				<button class="ping-btn" on:click={saveBuildCommand} disabled={savingBuildCommand}>
+					{savingBuildCommand ? 'Saving…' : 'Save'}
+				</button>
+			</div>
+			<textarea
+				class="nx-input instruction-textarea"
+				bind:value={buildCommandDraft}
+				rows="3"
+				placeholder="e.g. docker build -f backend/Dockerfile -t {'{image}'} backend"
+			></textarea>
+			{#if buildCommandError}
+				<p class="position-error">{buildCommandError}</p>
+			{:else if buildCommandMessage}
+				<p class="position-ok">{buildCommandMessage}</p>
+			{:else}
+				<p class="instruction-help">Used by the build agent to produce the preview image. Use <code>{'{image}'}</code> as a placeholder for the auto-generated image tag. Leave blank to let the agent discover the build method automatically.</p>
+			{/if}
 		</div>
 
 		<!-- Office Position -->

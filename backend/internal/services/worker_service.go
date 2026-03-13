@@ -155,6 +155,13 @@ func (s *workerService) UpdateWorker(ctx context.Context, workerID uuid.UUID, re
 		worker.CLICommand = *req.CLICommand
 	}
 
+	if req.BuildCommand != nil {
+		if err := s.workerRepo.UpdateBuildCommand(ctx, workerID, strings.TrimSpace(*req.BuildCommand)); err != nil {
+			return nil, err
+		}
+		worker.BuildCommand = strings.TrimSpace(*req.BuildCommand)
+	}
+
 	if req.MapX != nil || req.MapY != nil {
 		mapX := worker.MapX
 		mapY := worker.MapY
@@ -323,6 +330,7 @@ func toWorkerResponse(w *models.Worker) *domains.WorkerResponse {
 		GroupName:          w.GroupName,
 		Name:               w.Name,
 		CLICommand:         w.CLICommand,
+		BuildCommand:       w.BuildCommand,
 		Workspace:          w.Workspace,
 		GitRepoURL:         w.GitRepoURL,
 		InstructionJob:     w.InstructionJob,

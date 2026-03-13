@@ -29,6 +29,8 @@ func BuildContainer() (*dig.Container, error) {
 		repository.NewMessageRepo,
 		repository.NewPlanSessionRepo,
 		repository.NewPreviewBundleRepo,
+		repository.NewWorkerBuildRepo,
+		repository.NewDeploymentPlanRepo,
 
 		// File-based stack registry
 		provideStackRegistry,
@@ -45,6 +47,10 @@ func BuildContainer() (*dig.Container, error) {
 		services.NewWorkerService,
 		services.NewPlanSessionService,
 		services.NewPreviewBundleService,
+		services.NewWorkerBuildService,
+		services.NewContainerService,
+		services.NewNginxConfigService,
+		services.NewDeploymentPlanService,
 
 		// Controllers
 		controllers.NewAuthController,
@@ -53,6 +59,8 @@ func BuildContainer() (*dig.Container, error) {
 		controllers.NewWorkerController,
 		controllers.NewPlanSessionController,
 		controllers.NewPreviewBundleController,
+		controllers.NewWorkerBuildController,
+		controllers.NewDeploymentPlanController,
 
 		// Router
 		provideRouter,
@@ -67,6 +75,12 @@ func BuildContainer() (*dig.Container, error) {
 	// Wire dispatcher → job service result callback (breaks circular dependency).
 	if err := c.Invoke(func(dispatcher services.DispatcherService, jobSvc services.JobService) {
 		dispatcher.SetResultHandler(jobSvc)
+	}); err != nil {
+		return nil, err
+	}
+
+	if err := c.Invoke(func(buildSvc services.WorkerBuildService, planSvc services.DeploymentPlanService) {
+		buildSvc.SetDeploymentPlanHook(planSvc)
 	}); err != nil {
 		return nil, err
 	}
@@ -104,8 +118,10 @@ func provideRouter(
 	workerCtrl *controllers.WorkerController,
 	planCtrl *controllers.PlanSessionController,
 	previewCtrl *controllers.PreviewBundleController,
+	workerBuildCtrl *controllers.WorkerBuildController,
+	deploymentPlanCtrl *controllers.DeploymentPlanController,
 ) http.Handler {
-	return buildRouter(authSvc, workerRepo, hub, authCtrl, jobCtrl, msgCtrl, workerCtrl, planCtrl, previewCtrl)
+	return buildRouter(authSvc, workerRepo, hub, authCtrl, jobCtrl, msgCtrl, workerCtrl, planCtrl, previewCtrl, workerBuildCtrl, deploymentPlanCtrl)
 }
 
 func provideStackRegistry() (*stackregistry.Registry, error) {

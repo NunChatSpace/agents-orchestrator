@@ -18,6 +18,7 @@ type WorkerResponse struct {
 	GroupName          string     `json:"group_name"`
 	Name               string     `json:"name"`
 	CLICommand         string     `json:"cli_command"`
+	BuildCommand       string     `json:"build_command"`
 	Workspace          string     `json:"workspace"`
 	GitRepoURL         string     `json:"git_repo_url"`
 	InstructionJob     string     `json:"instruction_job"`
@@ -41,6 +42,7 @@ type CreateWorkerRequest struct {
 // UpdateWorkerRequest is the payload to PATCH /api/v1/workers/{worker_id}.
 type UpdateWorkerRequest struct {
 	CLICommand         *string `json:"cli_command,omitempty"`
+	BuildCommand       *string `json:"build_command,omitempty"`
 	MapX               *int    `json:"map_x,omitempty"`
 	MapY               *int    `json:"map_y,omitempty"`
 	InstructionJob     *string `json:"instruction_job,omitempty"`

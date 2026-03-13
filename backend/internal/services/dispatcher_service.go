@@ -93,6 +93,121 @@ func (d *dispatcherService) CancelWorkerJob(ctx context.Context, workerID uuid.U
 	return nil
 }
 
+// RunBuildInstruction executes a synthetic build instruction, streaming each output line to logFn.
+func (d *dispatcherService) RunBuildInstruction(ctx context.Context, workerID uuid.UUID, buildID uuid.UUID, message string, logFn func(string)) error {
+	worker, err := d.workerRepo.GetByID(ctx, workerID)
+	if err != nil {
+		return fmt.Errorf("get worker: %w", err)
+	}
+
+	instruction, err := composeWorkerInstruction(worker, models.WorkerInstructionFieldJob, message)
+	if err != nil {
+		return err
+	}
+
+	cliCmd := worker.CLICommand
+	if cliCmd == "" {
+		cliCmd = "claude"
+	}
+	isClaude := cliCmd == "claude"
+
+	var args []string
+	if isClaude {
+		args = []string{"-p", instruction, "--output-format", "stream-json"}
+	} else {
+		args = []string{"exec", "--dangerously-bypass-approvals-and-sandbox", "--json", "--skip-git-repo-check", instruction}
+	}
+
+	cmd := exec.CommandContext(ctx, cliCmd, args...)
+	cmd.Dir = worker.Workspace
+
+	stdoutPipe, pipeErr := cmd.StdoutPipe()
+	if pipeErr != nil {
+		return fmt.Errorf("build CLI stdout pipe: %w", pipeErr)
+	}
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if startErr := cmd.Start(); startErr != nil {
+		return fmt.Errorf("build CLI start: %w", startErr)
+	}
+
+	scanner := bufio.NewScanner(stdoutPipe)
+	scanner.Buffer(make([]byte, 4*1024*1024), 4*1024*1024)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+		if logFn != nil {
+			if text := extractBuildLogLine(line, isClaude); text != "" {
+				logFn(text)
+			}
+		}
+	}
+
+	if runErr := cmd.Wait(); runErr != nil {
+		stderrStr := strings.TrimSpace(stderr.String())
+		log.Error().
+			Err(runErr).
+			Str("worker_build_id", buildID.String()).
+			Str("worker", worker.Name).
+			Str("stderr", stderrStr).
+			Msg("build CLI failed")
+		if stderrStr != "" {
+			return fmt.Errorf("build CLI failed: %s", stderrStr)
+		}
+		return fmt.Errorf("build CLI failed: %w", runErr)
+	}
+	return nil
+}
+
+// extractBuildLogLine extracts a human-readable string from one JSON line of CLI output.
+func extractBuildLogLine(line string, isClaude bool) string {
+	var obj map[string]any
+	if json.Unmarshal([]byte(line), &obj) != nil {
+		return line
+	}
+	if isClaude {
+		if obj["type"] == "assistant" {
+			msg, _ := obj["message"].(map[string]any)
+			if msg != nil {
+				for _, c := range func() []any { v, _ := msg["content"].([]any); return v }() {
+					item, _ := c.(map[string]any)
+					if item == nil {
+						continue
+					}
+					if item["type"] == "text" {
+						if t, ok := item["text"].(string); ok && t != "" {
+							return t
+						}
+					}
+					if item["type"] == "tool_use" {
+						toolName, _ := item["name"].(string)
+						inputBytes, _ := json.Marshal(item["input"])
+						return fmt.Sprintf("[tool] %s %s", toolName, truncateBytes(inputBytes, 160))
+					}
+				}
+			}
+		}
+		if obj["type"] == "result" {
+			if r, ok := obj["result"].(string); ok && r != "" {
+				return "[done] " + truncateBytes([]byte(r), 200)
+			}
+		}
+	} else {
+		if obj["type"] == "item.completed" {
+			item, _ := obj["item"].(map[string]any)
+			if item != nil {
+				if t, ok := item["text"].(string); ok && t != "" {
+					return t
+				}
+			}
+		}
+	}
+	return ""
+}
+
 // runCLI executes the CLI agent, streams thinking steps, and calls back with the final result.
 func (d *dispatcherService) runCLI(worker *models.Worker, jobID uuid.UUID, resumeID string, field models.WorkerInstructionField, message string) {
 	jobKey := jobID.String()

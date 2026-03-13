@@ -119,6 +119,12 @@ func (r *workerRepo) UpdateCLICommand(ctx context.Context, workerID uuid.UUID, c
 	return err
 }
 
+func (r *workerRepo) UpdateBuildCommand(ctx context.Context, workerID uuid.UUID, buildCommand string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE workers SET build_command=$1 WHERE worker_id=$2`, buildCommand, workerID)
+	return err
+}
+
 func (r *workerRepo) UpdateMapPosition(ctx context.Context, workerID uuid.UUID, mapX, mapY int) error {
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE workers SET map_x=$1, map_y=$2 WHERE worker_id=$3`, mapX, mapY, workerID)

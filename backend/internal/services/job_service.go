@@ -573,6 +573,7 @@ type DispatcherService interface {
 	NotifyUserReply(ctx context.Context, workerID uuid.UUID, jobID uuid.UUID, resumeID string, message string) error
 	CancelWorkerJob(ctx context.Context, workerID uuid.UUID, jobID uuid.UUID) error
 	SetResultHandler(h JobResultHandler)
+	RunBuildInstruction(ctx context.Context, workerID uuid.UUID, buildID uuid.UUID, message string, logFn func(string)) error
 	RunPlan(ctx context.Context, workerID uuid.UUID, task string) (string, error)
 	// RunPlanStream streams the agent reply via SSE to w. Returns the full reply text and new resume_id.
 	RunPlanStream(ctx context.Context, w http.ResponseWriter, workerID uuid.UUID, resumeID string, field models.WorkerInstructionField, message string) (reply string, newResumeID string, err error)

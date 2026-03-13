@@ -676,7 +676,7 @@ Schema change: migration `008_worker_map_position.sql` adds `workers.map_x` and 
 | POST | `/api/v1/plan-sessions/{id}/complete` | `PlanSessionController.Complete` | Mark completed |
 | POST | `/api/v1/plan-sessions/{id}/discard` | `PlanSessionController.Discard` | Soft-delete session |
 
-### API Endpoints — Preview Runtime
+### API Endpoints — Preview Runtime (Legacy Bundle System)
 
 | Method | Path | Handler | Notes |
 | --- | --- | --- | --- |
@@ -687,14 +687,27 @@ Schema change: migration `008_worker_map_position.sql` adds `workers.map_x` and 
 | POST | `/api/v1/preview-bundles/{bundle_id}/destroy` | `PreviewBundleController.Destroy` | Mark bundle destroyed; cleanup hook remains explicit |
 | POST | `/api/v1/preview-bundles/{bundle_id}/build-reports` | `PreviewBundleController.ReportBuild` | Worker-authenticated role build callback |
 
-Preview runtime is intentionally split into two contracts:
+### API Endpoints — Worker Builds (Phase 11+)
 
-- user/session-authenticated APIs create, inspect, and destroy preview bundles
-- worker-key-authenticated callbacks report per-role image artifacts back to the orchestrator
+| Method | Path | Handler | Auth | Notes |
+| --- | --- | --- | --- | --- |
+| POST | `/api/v1/workers/{worker_id}/builds` | `WorkerBuildController.TriggerBuild` | Session | Trigger build: `{ stack_id, role, mode }` |
+| GET | `/api/v1/workers/{worker_id}/builds` | `WorkerBuildController.List` | Session | List builds ordered `created_at DESC` |
+| POST | `/api/v1/workers/{worker_id}/build-reports` | `WorkerBuildController.ReportBuild` | Worker-key | Worker callback: report build result |
+
+### API Endpoints — Deployment Plans (Phase 13+)
+
+| Method | Path | Handler | Auth | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/v1/deployment-plans` | `DeploymentPlanController.List` | Session | List all plans for current user |
+| POST | `/api/v1/deployment-plans` | `DeploymentPlanController.Create` | Session | Create and start deploying a named plan |
+| GET | `/api/v1/deployment-plans/{id}` | `DeploymentPlanController.Get` | Session | Get plan with role states |
+| POST | `/api/v1/deployment-plans/{id}/stop` | `DeploymentPlanController.Stop` | Session | Stop containers and remove proxy route |
+| DELETE | `/api/v1/deployment-plans/{id}` | `DeploymentPlanController.Delete` | Session | Remove plan (stopped/failed only) |
 
 ### PreviewBundleService
 
-`PreviewBundleService` manages preview-bundle state and stack-registry resolution.
+`PreviewBundleService` manages preview-bundle state and stack-registry resolution (legacy system, retained for reference).
 
 Responsibilities:
 
@@ -706,7 +719,138 @@ Responsibilities:
 - record append-only build manifests per reported artifact
 - move bundle state through `pending_build -> building -> ready_to_deploy -> failed -> destroyed`
 
-This service does not fake runtime deployment. In the current slice, it owns the persisted contract needed before worker-side Docker build/push execution and preview deploy orchestration are added.
+### WorkerBuildService (Phase 11+)
+
+`WorkerBuildService` manages per-agent image build records.
+
+Responsibilities:
+
+- create `worker_builds` records on trigger
+- return existing `ready` build for the same `worker_id + stack_id + role` when `mode=latest`
+- validate `stack_id` / `role` against the file-based stack registry before dispatch
+- dispatch a synthetic build instruction to the agent via `DispatcherService`
+- update build status on worker callback
+- notify `DeploymentPlanService.OnBuildReady` after a terminal worker build report so pending deployment plans can react to both `ready` and `failed` results
+
+### WorkerBuild Model (Phase 11+)
+
+`WorkerBuild` stores one append-only image build attempt per worker.
+
+Key fields:
+
+- `id`
+- `worker_id`
+- `stack_id`
+- `role`
+- `build_mode` (`fresh | latest`)
+- `status` (`queued | building | ready | failed`)
+- `image_reference`
+- `image_digest`
+- `error_message`
+- `triggered_by`
+- `started_at`
+- `completed_at`
+- `created_at`
+
+Rules:
+
+- `mode=latest` may reuse an existing `ready` build, but only for the same `stack_id` and `role`
+- synthetic build dispatch uses the worker's normal `instruction_job` prompt field plus a build-specific body
+- worker callbacks must present the same `worker_id` in the path and the authenticated worker key
+
+### DeploymentPlan Model (Phase 13+)
+
+`DeploymentPlan` stores one named preview runtime request per user.
+
+Key fields:
+
+- `id`
+- `user_id`
+- `name` (global unique slug)
+- `stack_id`
+- `build_mode`
+- `status` (`pending | deploying | running | failed | stopped`)
+- `preview_url`
+- `error`
+- `stopped_at`
+- `created_at`
+- `updated_at`
+
+### DeploymentPlanRole Model (Phase 13+)
+
+`DeploymentPlanRole` stores one worker/build/runtime row per required stack role in a plan.
+
+Key fields:
+
+- `id`
+- `plan_id`
+- `role`
+- `worker_id`
+- `worker_build_id`
+- `image_reference`
+- `image_digest`
+- `container_name`
+- `host_port`
+- `build_status` (`pending | ready | failed`)
+- `deploy_status` (`pending | running | failed`)
+- `created_at`
+- `updated_at`
+
+### DeploymentPlanService (Phase 13+)
+
+`DeploymentPlanService` manages deployment plan lifecycle.
+
+Responsibilities:
+
+- validate plan name slug (`[a-z0-9-]{1,40}`, unique), stack, and per-role worker assignments
+- resolve `latest` builds or trigger `fresh` builds per role at creation time
+- execute deploy asynchronously via `ContainerService` + Docker CLI helpers in `deployment_plan_service.go`
+- write and reload nginx upstream config via `NginxConfigService`
+- perform blocking health probes per role after container start; the plan does not become `running` until all probes pass
+- stop containers and regenerate nginx config on stop
+- leave stop failures as operation errors; do not introduce a `stopping` status in Phase 13
+
+### Docker Preview Execution (Phase 13+)
+
+Deployment runtime currently lives inside `DeploymentPlanService`, with Docker CLI calls isolated behind `ContainerService`.
+
+- Uses `os/exec` (not Docker SDK).
+- `ContainerService` wraps `docker run`, `docker stop`, `docker rm`, `docker inspect`, and `docker exec`.
+- Backend container mounts `/var/run/docker.sock`.
+- Preview containers: `preview-{plan-name}-{role}`.
+- Host port range: 8200+ (stored in `deployment_plan_roles.host_port`).
+- Host-port allocation is database-backed: the repository locks `deployment_plan_roles`, reads all non-null `host_port` values in use, picks the next free port starting at `8200`, and stores it on the role row before container start.
+- Deploy image references are translated from the compose-internal registry host (`registry:5000`) to the host-reachable registry endpoint (`localhost:5001`) before `docker run`.
+- Preview containers join the network named by `DOCKER_PREVIEW_NETWORK` (default `bridge`).
+- Per-container v1 env injection is limited to `PLAN_ID`, `STACK_ID`, `ROLE`, and `PREVIEW_HOSTNAME`.
+
+### ContainerService (Phase 15+)
+
+`ContainerService` is the dedicated preview-runtime Docker wrapper in `backend/internal/services/container_service.go`.
+
+Responsibilities:
+
+- launch role containers by digest reference through `docker run`
+- stop and remove preview containers idempotently through `docker stop` / `docker rm -f`
+- expose `docker inspect` helpers (`IsContainerRunning`, `GetContainerIP`) for future runtime checks
+- execute commands in running containers through `docker exec`
+
+Rationale:
+
+- keeps Docker SDK dependencies out of the backend
+- matches the existing `DispatcherService` subprocess pattern
+- keeps all CLI error formatting in one place instead of duplicating `exec.CommandContext` logic across services
+
+### NginxConfigService (Phase 13+)
+
+`NginxConfigService` generates `infra/nginx/preview-upstreams.conf` and reloads nginx.
+
+- Regenerates the entire file from all `running` deployment plans on each deploy or stop.
+- Calls `docker exec proxy nginx -s reload` after write.
+- Upstreams target `host.docker.internal:{host_port}`. This is a Docker Desktop for Mac requirement for the current compose topology; `127.0.0.1` inside the `proxy` or `backend` container would loop back into that container, not the Docker host.
+- Routing is a pragmatic v1 `subdomain-preview` assumption owned directly by `NginxConfigService`: when both `backend` and `frontend` roles exist, `/api/` proxies to backend and `/` proxies to frontend; when only one role exists, nginx proxies every request to that single upstream.
+- `infra/nginx/default.conf` includes `preview-upstreams.conf` at the top; there is no placeholder `*.preview` server block anymore.
+- Backend and proxy share the same bind-mounted `preview-upstreams.conf` file; backend writes it through `NGINX_PREVIEW_CONF`.
 
 ### DispatcherService
 
@@ -715,6 +859,7 @@ This service does not fake runtime deployment. In the current slice, it owns the
 Key methods:
 
 - `SendToWorker` — launches a job asynchronously (goroutine), streams JSONL output, stores messages.
+- `RunBuildInstruction(ctx, workerID, buildID, message) error` — synchronous synthetic build execution path used by `WorkerBuildService`; does not create normal job/message records.
 - `RunPlan(ctx, workerID, task) (string, error)` — **synchronous** (2-minute timeout). Runs the worker's CLI with a prompt-refinement instruction. Returns the final text. Used by `WorkerController.Plan`.
 - `RunPlanStream(ctx, w, workerID, resumeID, message) (reply, newResumeID, error)` — **streaming**. Runs the worker's CLI and writes SSE events to `w` as the agent responds. Used by `PlanSessionController` for discussion turns and plan generation.
 
@@ -737,8 +882,9 @@ Key methods:
 | `/plans` | `routes/(app)/plans/+page.svelte` | Plans page — discussion-first job creation |
 | `/office` | `routes/(app)/office/+page.svelte` | Three.js open-floor cyberpunk Office scene with HUD overlay, avatar movement, click selection, and worker interaction panel |
 | `/jobs/[job_id]` | `routes/(app)/jobs/[job_id]/+page.svelte` | Job chat feed |
+| `/deploys` | `routes/(app)/deploys/+page.svelte` | Deployment plans page — create, view, stop, delete plans (Phase 14+) |
 
-Shared layout `routes/(app)/+layout.svelte` renders the persistent top bar (logo, workspace dropdown, Agents \| Plans \| Office nav) for all app routes.
+Shared layout `routes/(app)/+layout.svelte` renders the persistent top bar (logo, workspace dropdown, Agents \| Plans \| Office \| Deploys nav) for all app routes.
 
 Shared layout `routes/(app)/agents/[worker_id]/+layout.svelte` renders the agent header and Jobs \| Settings sub-nav for agent sub-pages.
 
@@ -773,45 +919,75 @@ This keeps preview bundle assembly versioned with orchestrator code while avoidi
 
 ### Frontend Preview Flow
 
-Frontend preview request is expected to live on the job detail page rather than a global admin page.
+The canonical preview flow is agent-centric, not job-centric.
 
-Minimum UI flow:
+**Build trigger (Phase 12+):**
 
-- job detail page renders a **Request Preview** action
-- modal fetches `GET /api/v1/preview-stacks`
-- modal renders one worker selector per required role
-- worker options come from the existing worker list filtered by the role's configured `worker_group`
-- submit calls `POST /api/v1/preview-bundles`
-- response payload drives preview status rendering on the same job detail surface
+- agent card shows **Build** button when the agent has an active job
+- active-job detection is derived from jobs assigned to that worker with status `assigned`, `busy`, or `pending_user`; it does not rely on `worker.status === 'assigned'`
+- click opens mode picker: Fresh (force rebuild) or Latest (reuse last ready build)
+- confirm calls `POST /api/v1/workers/{id}/builds`
+- card updates to show current build status badge and last image info
+- Phase 12 frontend uses a temporary hardcoded mapping:
+  - `fi-backend` → `{ stack_id: 'fi-web-app', role: 'backend' }`
+  - `fi-frontend` → `{ stack_id: 'fi-web-app', role: 'frontend' }`
+  - unmapped groups keep the button disabled until explicit stack selection exists
+
+**Deployment plan (Phase 14+):**
+
+- user goes to `/deploys` page
+- clicks **New Plan**
+- modal: name (slug), stack, build mode, one agent per role
+- submit calls `POST /api/v1/deployment-plans`
+- plan card shows status, preview URL when running, role-level build + deploy badges
+- frontend files:
+  - `routes/(app)/deploys/+page.svelte`
+  - `components/organisms/CreateDeployPlanModal.svelte`
+  - `components/molecules/DeployPlanCard.svelte`
 
 ### Preview URL Convention
 
-Each agent (worker) has one stable preview URL:
+Each deployment plan has one preview URL keyed by plan name:
 
 ```text
-http://shiphide.{worker_name}.preview
+http://shiphide.{plan-name}.preview
 ```
 
-- `{worker_name}` is the worker `name` field, lowercased and slugified
-- URL is reused across redeployments for the same agent
-- when a new preview is deployed for an agent, the previous `healthy` bundle is auto-marked `destroyed` and its runtime is cleaned up after a short TTL
-- multiple agents may have simultaneous active previews at distinct URLs
-- access requires a hosts-file entry per device: `127.0.0.1 shiphide.{worker_name}.preview`
+- `{plan-name}` is the user-supplied slug (`[a-z0-9-]{1,40}`)
+- multiple plans can be `running` simultaneously at distinct URLs
+- each plan's URL is unique — there is no per-agent URL in the deployment plan system
+- access requires a hosts-file entry per device per plan name: `127.0.0.1 shiphide.{plan-name}.preview`
+- optional: install host-based dnsmasq for automatic wildcard `*.preview` → `127.0.0.1` on Mac
 
 ### Deployment Networking (Compose)
 
-Local/LAN compose topology uses a single host-exposed port:
+Local/LAN compose topology:
 
-- `proxy` (nginx) exposes `5174:80` on host
-- `frontend` has no host port mapping (internal only)
-- `backend` has no host port mapping (internal only)
-- `postgres` has no host port mapping (internal only)
+| Service | Host port | Internal port | Notes |
+| --- | --- | --- | --- |
+| `proxy` (nginx) | `5174:80`, `80:80` | 80 | Main app + preview routing |
+| `registry` (OCI) | `5001:5000` | 5000 | Phase 11+; named volume `registrydata`; workers push to `registry:5000` |
+| `backend` | — | 8080 | Mounts `/var/run/docker.sock` and shared `preview-upstreams.conf`; writes nginx preview config through `NGINX_PREVIEW_CONF`; health-checks preview roles through `host.docker.internal:{host_port}` |
+| `frontend` | — | 5173 | |
+| `postgres` | — | 5432 | |
+
+Additional backend mounts (Phase 11+):
+- `/var/run/docker.sock:/var/run/docker.sock` — required for worker-triggered `docker build` / `docker push` and later container lifecycle management
+- `./infra/nginx/preview-upstreams.conf:/app/infra/nginx/preview-upstreams.conf` — shared writable preview route file used by backend
+- `./infra/nginx/preview-upstreams.conf:/etc/nginx/conf.d/preview-upstreams.conf` — same shared file mounted into `proxy` so nginx reloads the latest generated preview config
 
 Routing:
 
-- browser `GET /` -> `proxy` -> `frontend:5173`
-- browser `GET/POST /api/*` -> `proxy` -> `backend:8080/api/*`
-- browser `WS /ws` -> `proxy` -> `backend:8080/ws`
+- browser `GET /` → `proxy` → `frontend:5173`
+- browser `GET/POST /api/*` → `proxy` → `backend:8080/api/*`
+- browser `WS /ws` → `proxy` → `backend:8080/ws`
+- browser `GET http://shiphide.{plan}.preview/` → `proxy` → generated upstream in `preview-upstreams.conf` → `host.docker.internal:{host_port}`
+
+DNS note:
+
+- v1 still supports manual hosts-file entries per plan
+- optional Mac setup: install host-based dnsmasq so any `*.preview` hostname resolves to `127.0.0.1`
+- the compose-based preview runtime itself still depends on Docker Desktop exposing `host.docker.internal` inside containers
 
 Frontend should keep `VITE_BACKEND_URL` empty in this mode so API calls resolve to same-origin `/api/v1`.
 
