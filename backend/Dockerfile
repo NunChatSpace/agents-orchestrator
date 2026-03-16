@@ -11,6 +11,12 @@ RUN apk add --no-cache ca-certificates tzdata git openssh-client docker-cli curl
 # Install CLI agents
 RUN npm install -g @anthropic-ai/claude-code @openai/codex
 
+# Install pnpm (JS package manager) and uv (Python package manager)
+RUN npm install -g pnpm && \
+    curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    ln -s /root/.local/bin/uv /usr/local/bin/uv && \
+    ln -s /root/.local/bin/uvx /usr/local/bin/uvx
+
 COPY --from=builder /app/server /server
 COPY --from=builder /app/migrations /migrations
 COPY --from=builder /app/stack_registry /stack_registry

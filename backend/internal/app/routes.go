@@ -24,8 +24,7 @@ func buildRouter(
 	workerCtrl *controllers.WorkerController,
 	planCtrl *controllers.PlanSessionController,
 	previewCtrl *controllers.PreviewBundleController,
-	workerBuildCtrl *controllers.WorkerBuildController,
-	deploymentPlanCtrl *controllers.DeploymentPlanController,
+	previewSessionCtrl *controllers.PreviewSessionController,
 ) http.Handler {
 	r := mux.NewRouter()
 
@@ -33,12 +32,10 @@ func buildRouter(
 	r.Use(corsMiddleware)
 	r.Use(loggingMiddleware)
 
-	// Catch-all OPTIONS handler so CORS preflight works for all routes.
 	r.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}).Methods(http.MethodOptions)
 
-	// Health check (public)
 	r.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -86,9 +83,6 @@ func buildRouter(
 	priv.HandleFunc("/workers/{worker_id}/instructions/reset/{field}", workerCtrl.ResetInstruction).Methods(http.MethodPost)
 	priv.HandleFunc("/workers/{worker_id}/ping", workerCtrl.Ping).Methods(http.MethodPost)
 	priv.HandleFunc("/workers/{worker_id}/plan", workerCtrl.Plan).Methods(http.MethodPost)
-	priv.HandleFunc("/workers/{worker_id}/builds", workerBuildCtrl.TriggerBuild).Methods(http.MethodPost)
-	priv.HandleFunc("/workers/{worker_id}/builds", workerBuildCtrl.List).Methods(http.MethodGet)
-	priv.HandleFunc("/worker-builds/{build_id}", workerBuildCtrl.GetBuild).Methods(http.MethodGet)
 
 	// Plan sessions
 	priv.HandleFunc("/plan-sessions", planCtrl.List).Methods(http.MethodGet)
@@ -100,20 +94,22 @@ func buildRouter(
 	priv.HandleFunc("/plan-sessions/{id}/complete", planCtrl.Complete).Methods(http.MethodPost)
 	priv.HandleFunc("/plan-sessions/{id}/discard", planCtrl.Discard).Methods(http.MethodPost)
 
-	// Preview runtime
+	// Preview bundles (legacy)
 	priv.HandleFunc("/preview-stacks", previewCtrl.ListStacks).Methods(http.MethodGet)
 	priv.HandleFunc("/preview-bundles", previewCtrl.List).Methods(http.MethodGet)
 	priv.HandleFunc("/preview-bundles", previewCtrl.Create).Methods(http.MethodPost)
 	priv.HandleFunc("/preview-bundles/{bundle_id}", previewCtrl.Get).Methods(http.MethodGet)
 	priv.HandleFunc("/preview-bundles/{bundle_id}/destroy", previewCtrl.Destroy).Methods(http.MethodPost)
-	priv.HandleFunc("/deployment-plans", deploymentPlanCtrl.List).Methods(http.MethodGet)
-	priv.HandleFunc("/deployment-plans", deploymentPlanCtrl.Create).Methods(http.MethodPost)
-	priv.HandleFunc("/deployment-plans/{id}", deploymentPlanCtrl.Get).Methods(http.MethodGet)
-	priv.HandleFunc("/deployment-plans/{id}/stop", deploymentPlanCtrl.Stop).Methods(http.MethodPost)
-	priv.HandleFunc("/deployment-plans/{id}/retry", deploymentPlanCtrl.Retry).Methods(http.MethodPost)
-	priv.HandleFunc("/deployment-plans/{id}", deploymentPlanCtrl.Delete).Methods(http.MethodDelete)
 
-	// WebSocket — registered at root (not under /api/v1) to match frontend expectation.
+	// Preview sessions (process-based)
+	priv.HandleFunc("/preview-sessions", previewSessionCtrl.List).Methods(http.MethodGet)
+	priv.HandleFunc("/preview-sessions", previewSessionCtrl.Create).Methods(http.MethodPost)
+	priv.HandleFunc("/preview-sessions/{session_id}", previewSessionCtrl.Get).Methods(http.MethodGet)
+	priv.HandleFunc("/preview-sessions/{session_id}", previewSessionCtrl.Delete).Methods(http.MethodDelete)
+	priv.HandleFunc("/preview-sessions/{session_id}/stop", previewSessionCtrl.Stop).Methods(http.MethodPost)
+	priv.HandleFunc("/preview-sessions/{session_id}/roles/{role_id}/logs", previewSessionCtrl.GetRoleLog).Methods(http.MethodGet)
+
+	// WebSocket
 	wsHandler := middleware.RequireSession(authSvc)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user := middleware.UserFromContext(r.Context())
 		hub.ServeWS(w, r, user.UserID)
@@ -125,9 +121,6 @@ func buildRouter(
 	workerRoute.Use(middleware.RequireWorkerKey(workerRepo))
 	workerRoute.HandleFunc("/workers/reply", workerCtrl.Reply).Methods(http.MethodPost)
 	workerRoute.HandleFunc("/preview-bundles/{bundle_id}/build-reports", previewCtrl.ReportBuild).Methods(http.MethodPost)
-
-	// --- Build report callback (X-Build-Token auth, validated in controller) ---
-	api.HandleFunc("/workers/{worker_id}/build-reports", workerBuildCtrl.ReportBuild).Methods(http.MethodPost)
 
 	return r
 }

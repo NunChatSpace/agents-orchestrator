@@ -49,12 +49,12 @@ type WorkerRepository interface {
 	CreateWorker(ctx context.Context, worker *models.Worker) error
 	// UpdateCLICommand changes the cli_command for a worker.
 	UpdateCLICommand(ctx context.Context, workerID uuid.UUID, cliCommand string) error
-	// UpdateBuildCommand changes the build_command for a worker.
-	UpdateBuildCommand(ctx context.Context, workerID uuid.UUID, buildCommand string) error
 	// UpdateMapPosition updates the worker desk tile coordinates for Office view.
 	UpdateMapPosition(ctx context.Context, workerID uuid.UUID, mapX, mapY int) error
 	// UpdateInstructionFields updates one or more worker instruction fields.
 	UpdateInstructionFields(ctx context.Context, workerID uuid.UUID, patch WorkerInstructionPatch) error
+	// UpdatePreviewCommand changes the preview_command for a worker.
+	UpdatePreviewCommand(ctx context.Context, workerID uuid.UUID, cmd *string) error
 	// DeleteWorker soft-deletes a worker by setting deleted_at.
 	DeleteWorker(ctx context.Context, workerID uuid.UUID) error
 }

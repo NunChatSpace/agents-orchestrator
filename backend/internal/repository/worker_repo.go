@@ -119,11 +119,6 @@ func (r *workerRepo) UpdateCLICommand(ctx context.Context, workerID uuid.UUID, c
 	return err
 }
 
-func (r *workerRepo) UpdateBuildCommand(ctx context.Context, workerID uuid.UUID, buildCommand string) error {
-	_, err := r.db.ExecContext(ctx,
-		`UPDATE workers SET build_command=$1 WHERE worker_id=$2`, buildCommand, workerID)
-	return err
-}
 
 func (r *workerRepo) UpdateMapPosition(ctx context.Context, workerID uuid.UUID, mapX, mapY int) error {
 	_, err := r.db.ExecContext(ctx,
@@ -158,6 +153,12 @@ func (r *workerRepo) UpdateInstructionFields(ctx context.Context, workerID uuid.
 	args = append(args, workerID)
 	query := `UPDATE workers SET ` + strings.Join(setParts, ", ") + ` WHERE worker_id = $` + itoa(idx)
 	_, err := r.db.ExecContext(ctx, query, args...)
+	return err
+}
+
+func (r *workerRepo) UpdatePreviewCommand(ctx context.Context, workerID uuid.UUID, cmd *string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE workers SET preview_command=$1 WHERE worker_id=$2`, cmd, workerID)
 	return err
 }
 

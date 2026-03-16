@@ -1,0 +1,193 @@
+# Phase E — Frontend + Nginx + Spec + Architecture Docs
+
+## Goal
+Add frontend for the new preview system, update nginx config, rewrite the spec, and update ARCHITECTURE.md.
+
+---
+
+## STEP 1 — TypeScript types: `frontend/src/types/previewSession.ts` (new file)
+
+```typescript
+export interface PreviewSessionRole {
+    id: string;
+    worker_id: string;
+    role: string;
+    port?: number;
+    status: 'starting' | 'running' | 'stopped' | 'failed';
+    preview_url?: string;
+    error?: string;
+}
+
+export interface PreviewSession {
+    id: string;
+    status: 'starting' | 'running' | 'stopped' | 'failed';
+    error?: string;
+    roles: PreviewSessionRole[];
+    created_at: string;
+    stopped_at?: string;
+}
+```
+
+---
+
+## STEP 2 — Worker type: `frontend/src/types/worker.ts`
+
+Add `preview_command?: string` to the `Worker` interface.
+
+---
+
+## STEP 3 — API helpers: `frontend/src/lib/apis/previewSessions.ts` (new file)
+
+Read `frontend/src/lib/apis/fetcher.ts` (or `client.ts`) first to understand the import path and function signatures. Use the same pattern.
+
+```typescript
+import type { PreviewSession } from '../../types/previewSession';
+// import POST, GET, DELETE from the existing fetcher — use the correct path
+
+export const createPreviewSession = (data: { roles: { role: string; worker_id: string }[] }) =>
+    POST<PreviewSession>('/v1/preview-sessions', data);
+
+export const listPreviewSessions = () =>
+    GET<PreviewSession[]>('/v1/preview-sessions');
+
+export const getPreviewSession = (id: string) =>
+    GET<PreviewSession>(`/v1/preview-sessions/${id}`);
+
+export const stopPreviewSession = (id: string) =>
+    POST<PreviewSession>(`/v1/preview-sessions/${id}/stop`, {});
+
+export const deletePreviewSession = (id: string) =>
+    DELETE<void>(`/v1/preview-sessions/${id}`);
+```
+
+If the fetcher does not have a `DELETE` export, add one following the same pattern as `POST`/`GET`.
+
+---
+
+## STEP 4 — Worker settings page: `frontend/src/routes/(app)/agents/[worker_id]/settings/+page.svelte`
+
+Read the current file. Add a "Preview Command" text input field to the settings form:
+- Label: **Preview Command**
+- Placeholder: `PORT={PORT} npm run dev`
+- Bound to `worker.preview_command`
+- Saved via the existing PATCH worker endpoint when the user saves settings
+- Use the same NEXUS input style as other fields on the page (`nx-input` or equivalent)
+
+---
+
+## STEP 5 — Agent card Preview button: `frontend/src/routes/(app)/+page.svelte`
+
+Read the current file. On each agent card, add a **Preview** button:
+
+Visibility: show only when the agent has an active job (status `assigned`, `busy`, or `pending_user`). Use the same active-job detection already used on the page.
+
+On click: open a small modal (or inline popover) with:
+- A role text input (label "Role", default value `"app"`, hint: use `frontend` or `backend` for multi-agent CORS pairing)
+- An optional peer agent dropdown (label "Pair with agent (optional)", lists other workers, allows none)
+- A **Start Preview** confirm button
+
+On confirm:
+```typescript
+const roles = [{ role: selectedRole, worker_id: worker.worker_id }];
+if (peerWorker) roles.push({ role: peerRole, worker_id: peerWorker.worker_id });
+await createPreviewSession({ roles });
+// navigate or show toast: "Preview starting — check /deploys"
+```
+
+Use NEXUS styling (`.nx-card`, `nx-input`, existing button styles). Do not introduce new CSS variables.
+
+---
+
+## STEP 6 — Deploys page: `frontend/src/routes/(app)/deploys/+page.svelte` (new file + directory)
+
+Create the directory `frontend/src/routes/(app)/deploys/` and the page file.
+
+Page content:
+- On mount: load sessions via `listPreviewSessions()`
+- Auto-refresh every 5 seconds while any session has status `starting`
+- For each session show:
+  - Short session ID (first 8 chars)
+  - Status badge: `starting` (yellow), `running` (green), `stopped` (grey), `failed` (red)
+  - `created_at` formatted as relative time or locale string
+  - For each role: role name, status badge, `preview_url` as a clickable external link if status=running
+  - **Stop** button (visible when status is `starting` or `running`) → calls `stopPreviewSession(id)` then refreshes
+  - **Delete** button (visible when status is `stopped` or `failed`) → calls `deletePreviewSession(id)` then removes from list
+
+Use NEXUS styling throughout. Empty state: "No preview sessions. Start one from an agent card."
+
+---
+
+## STEP 7 — Layout nav: `frontend/src/routes/(app)/+layout.svelte`
+
+Read the current file. Add (or update) the **Deploys** nav link to point to `/deploys`. Follow the exact same pattern and styling as the existing Agents / Plans / Office nav links.
+
+---
+
+## STEP 8 — Nginx: `infra/nginx/default.conf`
+
+Read the current file. Add this line **before** the first `server {` block:
+
+```nginx
+include /etc/nginx/conf.d/preview-upstreams.conf;
+```
+
+---
+
+## STEP 9 — Create empty upstreams file: `infra/nginx/preview-upstreams.conf`
+
+If the file does not exist, create it with:
+```
+# Generated by NginxConfigService — do not edit manually
+```
+
+---
+
+## STEP 10 — Rewrite spec: `.agent/specs/workspace-preview-runtime-spec-v1.md`
+
+Replace the entire content with a new spec documenting the process-based approach. Cover:
+
+1. **Purpose** — process-based preview; no image builds; agents start their app as a process in their container
+2. **High-Level Model** — PreviewSession + PreviewSessionRole + nginx routing
+3. **Worker Contract** — `preview_command` field configured in worker settings; must bind on `$PORT`; must call `/preview-reports` callback when ready
+4. **Env var injection** — `PORT` always; `CORS_ALLOWED_ORIGINS` for backend when paired with frontend; `PUBLIC_API_BASE_URL` for frontend when paired with backend
+5. **URL convention** — `http://shiphide.{worker_name}.preview`
+6. **Lifecycle** — starting → running / failed; stopped (explicit); transition rules
+7. **API Contract** — all endpoints with request/response shapes
+8. **Nginx config** — NginxConfigService generates per running role, reloads on change
+9. **DNS** — hosts-file entry per agent name OR dnsmasq wildcard `*.preview` on Mac
+10. **Security** — preview is local-only in v1; CORS wildcard not used (explicit origin injection)
+
+---
+
+## STEP 11 — Update `.agent/ARCHITECTURE.md`
+
+Read the current file. Make these changes:
+
+- **Remove** sections: WorkerBuild Model, WorkerBuildService, DeploymentPlan Model, DeploymentPlanRole Model, DeploymentPlanService, ContainerService
+- **Remove** from API endpoints tables: worker builds endpoints, deployment plans endpoints
+- **Remove** `registry` row from Deployment Networking table
+- **Add** PreviewSession API endpoints table:
+
+| Method | Path | Handler | Auth | Notes |
+|---|---|---|---|---|
+| POST | `/api/v1/preview-sessions` | `PreviewSessionController.Create` | Session | Create session + dispatch start to agents |
+| GET | `/api/v1/preview-sessions` | `PreviewSessionController.List` | Session | List sessions for current user |
+| GET | `/api/v1/preview-sessions/{id}` | `PreviewSessionController.Get` | Session | Get session with role states |
+| POST | `/api/v1/preview-sessions/{id}/stop` | `PreviewSessionController.Stop` | Session | Stop all role processes, remove nginx routes |
+| DELETE | `/api/v1/preview-sessions/{id}` | `PreviewSessionController.Delete` | Session | Remove stopped/failed session |
+| POST | `/api/v1/workers/{worker_id}/preview-reports` | `PreviewSessionController.ReportRole` | Worker-key | Agent callback: report running/failed |
+
+- **Add** PreviewSession system description under Project-Specific Notes
+- **Update** Frontend Routes table: `/deploys` → "Preview Sessions page"
+- **Update** Frontend Preview Flow section to describe the new process-based flow
+- **Update** NginxConfigService description to reflect agent-based URL generation
+
+---
+
+## Acceptance Criteria
+
+1. `/deploys` page loads and shows sessions.
+2. Agent card shows Preview button only when agent has an active job.
+3. Worker settings page has Preview Command field that saves correctly.
+4. `infra/nginx/default.conf` includes `preview-upstreams.conf`.
+5. Spec and ARCHITECTURE.md reflect the new process-based model with no references to image builds or OCI registry.

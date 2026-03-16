@@ -155,11 +155,15 @@ func (s *workerService) UpdateWorker(ctx context.Context, workerID uuid.UUID, re
 		worker.CLICommand = *req.CLICommand
 	}
 
-	if req.BuildCommand != nil {
-		if err := s.workerRepo.UpdateBuildCommand(ctx, workerID, strings.TrimSpace(*req.BuildCommand)); err != nil {
+	if req.PreviewCommand != nil {
+		cmd := req.PreviewCommand
+		if cmd != nil && strings.TrimSpace(*cmd) == "" {
+			cmd = nil
+		}
+		if err := s.workerRepo.UpdatePreviewCommand(ctx, workerID, cmd); err != nil {
 			return nil, err
 		}
-		worker.BuildCommand = strings.TrimSpace(*req.BuildCommand)
+		worker.PreviewCommand = cmd
 	}
 
 	if req.MapX != nil || req.MapY != nil {
@@ -330,7 +334,7 @@ func toWorkerResponse(w *models.Worker) *domains.WorkerResponse {
 		GroupName:          w.GroupName,
 		Name:               w.Name,
 		CLICommand:         w.CLICommand,
-		BuildCommand:       w.BuildCommand,
+		PreviewCommand:     w.PreviewCommand,
 		Workspace:          w.Workspace,
 		GitRepoURL:         w.GitRepoURL,
 		InstructionJob:     w.InstructionJob,

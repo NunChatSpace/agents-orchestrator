@@ -26,10 +26,10 @@ type Worker struct {
 	Workspace          string       `db:"workspace"`
 	CLICommand         string       `db:"cli_command"`
 	GitRepoURL         string       `db:"git_repo_url"`
-	BuildCommand       string       `db:"build_command"`
 	InstructionJob     string       `db:"instruction_job"`
 	InstructionPlan    string       `db:"instruction_plan"`
 	InstructionDiscuss string       `db:"instruction_discuss"`
+	PreviewCommand      *string      `db:"preview_command"`
 	MapX               int          `db:"map_x"`
 	MapY               int          `db:"map_y"`
 	Status             WorkerStatus `db:"status"`

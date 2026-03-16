@@ -1,30 +1,13 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import Button from '../../components/atoms/Button.svelte';
-	import WorkerBuildStatus from '../../components/molecules/WorkerBuildStatus.svelte';
-	import { listWorkerBuilds, triggerBuild } from '../../lib/apis/workerBuilds';
 	import { allJobs } from '../../stores/jobs';
 	import { allWorkers } from '../../stores/workers';
 	import { selectedGroup } from '../../stores/selectedGroup';
 	import type { JobStatus } from '../../types/job';
-	import type { TriggerBuildRequest, WorkerBuild } from '../../types/workerBuild';
 	import type { Worker } from '../../types/worker';
 
 	const WORKSPACES_PATH = import.meta.env.WORKSPACES_PATH as string | undefined;
-	const ACTIVE_BUILD_JOB_STATUSES: JobStatus[] = ['assigned', 'busy', 'pending_user'];
-	const ACTIVE_BUILD_JOB_STATUS_SET = new Set<JobStatus>(ACTIVE_BUILD_JOB_STATUSES);
-	const WORKER_GROUP_TO_BUILD_TARGET: Record<string, { stack_id: string; role: string }> = {
-		// Phase 12 placeholder mapping until stack selection is introduced in the plan UI.
-		'fi-backend': { stack_id: 'fi-web-app', role: 'backend' },
-		'fi-frontend': { stack_id: 'fi-web-app', role: 'frontend' }
-	};
-
-	let latestBuilds: Record<string, WorkerBuild | undefined> = {};
-	let buildPickerOpenByWorkerId: Record<string, boolean> = {};
-	let buildModeByWorkerId: Record<string, TriggerBuildRequest['mode']> = {};
-	let buildLoadingByWorkerId: Record<string, boolean> = {};
-	let buildErrorByWorkerId: Record<string, string | undefined> = {};
-	let buildHistoryLoadedByWorkerId: Record<string, boolean> = {};
+	const ACTIVE_JOB_STATUSES = new Set<JobStatus>(['assigned', 'busy', 'pending_user']);
 
 	function toHostPath(containerPath: string): string {
 		if (!WORKSPACES_PATH) return containerPath;
@@ -32,20 +15,14 @@
 	}
 
 	$: groupWorkers = $allWorkers.filter((w) => w.group_name === $selectedGroup);
-	$: activeAssignedWorkerIds = Array.from(
-		new Set(
-			$allJobs
-				.filter(
-					(job) =>
-						!!job.assigned_worker_id &&
-						ACTIVE_BUILD_JOB_STATUS_SET.has(job.status)
-				)
-				.map((job) => job.assigned_worker_id as string)
-		)
-	).sort();
-	$: activeWorkers = $allWorkers.filter((worker) => activeAssignedWorkerIds.includes(worker.worker_id));
-	$: if (activeWorkers.length > 0) {
-		void loadBuildsForActiveWorkers(activeWorkers);
+	$: activeAssignedWorkerIds = new Set(
+		$allJobs
+			.filter((job) => !!job.assigned_worker_id && ACTIVE_JOB_STATUSES.has(job.status))
+			.map((job) => job.assigned_worker_id as string)
+	);
+
+	function hasActiveJob(workerId: string): boolean {
+		return activeAssignedWorkerIds.has(workerId);
 	}
 
 	function statusColor(status: Worker['status']): string {
@@ -69,129 +46,6 @@
 		const hrs = Math.floor(mins / 60);
 		if (hrs < 24) return `${hrs}h ago`;
 		return `${Math.floor(hrs / 24)}d ago`;
-	}
-
-	async function loadBuildsForActiveWorkers(workers: Worker[]) {
-		const workersToFetch = workers.filter((worker) => !buildHistoryLoadedByWorkerId[worker.worker_id]);
-		if (workersToFetch.length === 0) return;
-
-		buildHistoryLoadedByWorkerId = {
-			...buildHistoryLoadedByWorkerId,
-			...Object.fromEntries(workersToFetch.map((worker) => [worker.worker_id, true]))
-		};
-
-		const results = await Promise.allSettled(
-			workersToFetch.map((worker) => listWorkerBuilds(worker.worker_id))
-		);
-
-		const nextBuilds = { ...latestBuilds };
-		results.forEach((result, index) => {
-			const workerId = workersToFetch[index].worker_id;
-			if (result.status === 'fulfilled') {
-				const fetchedBuild = result.value[0];
-				const currentBuild = nextBuilds[workerId];
-				if (
-					fetchedBuild &&
-					(!currentBuild ||
-						new Date(fetchedBuild.created_at).getTime() >= new Date(currentBuild.created_at).getTime())
-				) {
-					nextBuilds[workerId] = fetchedBuild;
-				}
-				return;
-			}
-
-			buildHistoryLoadedByWorkerId = {
-				...buildHistoryLoadedByWorkerId,
-				[workerId]: false
-			};
-		});
-		latestBuilds = nextBuilds;
-	}
-
-	function hasActiveBuildJob(workerId: string): boolean {
-		return activeAssignedWorkerIds.includes(workerId);
-	}
-
-	function getWorkerBuildTarget(worker: Worker) {
-		return WORKER_GROUP_TO_BUILD_TARGET[worker.group_name];
-	}
-
-	function toggleBuildPicker(workerId: string) {
-		buildErrorByWorkerId = {
-			...buildErrorByWorkerId,
-			[workerId]: undefined
-		};
-		buildModeByWorkerId = {
-			...buildModeByWorkerId,
-			[workerId]: buildModeByWorkerId[workerId] ?? 'fresh'
-		};
-		buildPickerOpenByWorkerId = {
-			...buildPickerOpenByWorkerId,
-			[workerId]: !buildPickerOpenByWorkerId[workerId]
-		};
-	}
-
-	function closeBuildPicker(workerId: string) {
-		buildPickerOpenByWorkerId = {
-			...buildPickerOpenByWorkerId,
-			[workerId]: false
-		};
-		buildErrorByWorkerId = {
-			...buildErrorByWorkerId,
-			[workerId]: undefined
-		};
-	}
-
-	function selectBuildMode(workerId: string, mode: TriggerBuildRequest['mode']) {
-		buildModeByWorkerId = {
-			...buildModeByWorkerId,
-			[workerId]: mode
-		};
-	}
-
-	async function confirmBuild(worker: Worker) {
-		const target = getWorkerBuildTarget(worker);
-		if (!target) return;
-
-		const workerId = worker.worker_id;
-		buildLoadingByWorkerId = {
-			...buildLoadingByWorkerId,
-			[workerId]: true
-		};
-		buildErrorByWorkerId = {
-			...buildErrorByWorkerId,
-			[workerId]: undefined
-		};
-
-		try {
-			const build = await triggerBuild(workerId, {
-				stack_id: target.stack_id,
-				role: target.role,
-				mode: buildModeByWorkerId[workerId] ?? 'fresh'
-			});
-			latestBuilds = {
-				...latestBuilds,
-				[workerId]: build
-			};
-			buildPickerOpenByWorkerId = {
-				...buildPickerOpenByWorkerId,
-				[workerId]: false
-			};
-			buildHistoryLoadedByWorkerId = {
-				...buildHistoryLoadedByWorkerId,
-				[workerId]: true
-			};
-		} catch (error: unknown) {
-			buildErrorByWorkerId = {
-				...buildErrorByWorkerId,
-				[workerId]: error instanceof Error ? error.message : 'Failed to trigger build'
-			};
-		} finally {
-			buildLoadingByWorkerId = {
-				...buildLoadingByWorkerId,
-				[workerId]: false
-			};
-		}
 	}
 </script>
 
@@ -258,78 +112,6 @@
 						</div>
 					</div>
 					</div>
-
-					{#if hasActiveBuildJob(worker.worker_id)}
-						{@const buildTarget = getWorkerBuildTarget(worker)}
-						<div class="build-section">
-							<div class="build-section-header">
-								<p class="build-label">Last build</p>
-								<WorkerBuildStatus build={latestBuilds[worker.worker_id]} />
-							</div>
-
-							<div class="build-actions">
-								<span
-									class="build-button-wrap"
-									title={!buildTarget ? 'Build not supported for this worker group' : ''}
-								>
-									<Button
-										variant="secondary"
-										disabled={!buildTarget || buildLoadingByWorkerId[worker.worker_id]}
-										on:click={() => toggleBuildPicker(worker.worker_id)}
-									>
-										{buildLoadingByWorkerId[worker.worker_id] ? 'Building…' : 'Build'}
-									</Button>
-								</span>
-							</div>
-
-							{#if buildPickerOpenByWorkerId[worker.worker_id]}
-								<div class="build-mode-panel border border-purple-500/20 rounded-xl p-3 bg-purple-900/10">
-									<p class="build-mode-title">Build mode</p>
-									<div class="build-mode-options">
-										<button
-											type="button"
-											class:selected={buildModeByWorkerId[worker.worker_id] !== 'latest'}
-											class="build-mode-option"
-											on:click={() => selectBuildMode(worker.worker_id, 'fresh')}
-										>
-											<span>Fresh</span>
-											<span>Force a new build from the current workspace</span>
-										</button>
-										<button
-											type="button"
-											class:selected={buildModeByWorkerId[worker.worker_id] === 'latest'}
-											class="build-mode-option"
-											on:click={() => selectBuildMode(worker.worker_id, 'latest')}
-										>
-											<span>Latest</span>
-											<span>Use the most recent ready build when one exists</span>
-										</button>
-									</div>
-
-									<div class="build-mode-actions">
-										<Button
-											variant="ghost"
-											disabled={buildLoadingByWorkerId[worker.worker_id]}
-											on:click={() => closeBuildPicker(worker.worker_id)}
-										>
-											Cancel
-										</Button>
-										<Button
-											variant="secondary"
-											disabled={!buildTarget || buildLoadingByWorkerId[worker.worker_id]}
-											on:click={() => confirmBuild(worker)}
-										>
-											Confirm
-										</Button>
-									</div>
-								</div>
-							{/if}
-
-							{#if buildErrorByWorkerId[worker.worker_id]}
-								<p class="build-error">{buildErrorByWorkerId[worker.worker_id]}</p>
-							{/if}
-						</div>
-					{/if}
 
 					<div class="card-footer">
 						<button class="footer-btn" on:click={() => goto(`/agents/${worker.worker_id}/jobs`)}>
@@ -535,100 +317,7 @@
 		color: #a78bfa;
 	}
 
-	.card-clickable {
-		cursor: pointer;
-	}
-
-	.build-section {
-		display: flex;
-		flex-direction: column;
-		gap: 12px;
-		padding: 0 16px 14px;
-	}
-
-	.build-section-header {
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-		padding-top: 2px;
-	}
-
-	.build-label,
-	.build-mode-title {
-		margin: 0;
-		font-size: 10px;
-		font-weight: 600;
-		letter-spacing: 0.1em;
-		text-transform: uppercase;
-		color: rgba(196,181,253,0.35);
-	}
-
-	.build-actions {
-		display: flex;
-		align-items: center;
-	}
-
-	.build-button-wrap {
-		display: inline-flex;
-	}
-
-	.build-mode-panel {
-		display: flex;
-		flex-direction: column;
-		gap: 12px;
-	}
-
-	.build-mode-options {
-		display: grid;
-		gap: 10px;
-	}
-
-	.build-mode-option {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 4px;
-		padding: 10px 12px;
-		border-radius: 10px;
-		border: 1px solid rgba(139,92,246,0.16);
-		background: rgba(5,5,12,0.35);
-		color: rgba(240,240,255,0.88);
-		font-family: inherit;
-		text-align: left;
-		cursor: pointer;
-		transition: border-color 0.15s, background 0.15s, color 0.15s;
-	}
-
-	.build-mode-option span:first-child {
-		font-size: 13px;
-		font-weight: 600;
-		color: #f0f0ff;
-	}
-
-	.build-mode-option span:last-child {
-		font-size: 11px;
-		line-height: 1.45;
-		color: rgba(196,181,253,0.5);
-	}
-
-	.build-mode-option:hover,
-	.build-mode-option.selected {
-		border-color: rgba(139,92,246,0.38);
-		background: rgba(139,92,246,0.12);
-	}
-
-	.build-mode-actions {
-		display: flex;
-		justify-content: flex-end;
-		gap: 8px;
-	}
-
-	.build-error {
-		margin: 0;
-		font-size: 12px;
-		line-height: 1.45;
-		color: #fca5a5;
-	}
+	.card-clickable { cursor: pointer; }
 
 	.card-footer {
 		padding: 10px 16px;

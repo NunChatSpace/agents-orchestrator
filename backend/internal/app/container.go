@@ -21,7 +21,7 @@ func BuildContainer() (*dig.Container, error) {
 		// Infrastructure
 		NewDatabase,
 
-		// Repositories (concrete → interface via return type)
+		// Repositories
 		repository.NewUserRepo,
 		repository.NewSessionRepo,
 		repository.NewWorkerRepo,
@@ -29,13 +29,12 @@ func BuildContainer() (*dig.Container, error) {
 		repository.NewMessageRepo,
 		repository.NewPlanSessionRepo,
 		repository.NewPreviewBundleRepo,
-		repository.NewWorkerBuildRepo,
-		repository.NewDeploymentPlanRepo,
+		repository.NewPreviewSessionRepo,
 
 		// File-based stack registry
 		provideStackRegistry,
 
-		// WS hub — provide both concrete *ws.Hub and services.WSBroadcaster
+		// WS hub
 		ws.NewHub,
 		provideWSBroadcaster,
 
@@ -47,10 +46,8 @@ func BuildContainer() (*dig.Container, error) {
 		services.NewWorkerService,
 		services.NewPlanSessionService,
 		services.NewPreviewBundleService,
-		services.NewWorkerBuildService,
-		services.NewContainerService,
+		services.NewPreviewSessionService,
 		services.NewNginxConfigService,
-		services.NewDeploymentPlanService,
 
 		// Controllers
 		controllers.NewAuthController,
@@ -59,8 +56,7 @@ func BuildContainer() (*dig.Container, error) {
 		controllers.NewWorkerController,
 		controllers.NewPlanSessionController,
 		controllers.NewPreviewBundleController,
-		controllers.NewWorkerBuildController,
-		controllers.NewDeploymentPlanController,
+		controllers.NewPreviewSessionController,
 
 		// Router
 		provideRouter,
@@ -72,20 +68,14 @@ func BuildContainer() (*dig.Container, error) {
 		}
 	}
 
-	// Wire dispatcher → job service result callback (breaks circular dependency).
+	// Wire dispatcher → job service result callback.
 	if err := c.Invoke(func(dispatcher services.DispatcherService, jobSvc services.JobService) {
 		dispatcher.SetResultHandler(jobSvc)
 	}); err != nil {
 		return nil, err
 	}
 
-	if err := c.Invoke(func(buildSvc services.WorkerBuildService, planSvc services.DeploymentPlanService) {
-		buildSvc.SetDeploymentPlanHook(planSvc)
-	}); err != nil {
-		return nil, err
-	}
-
-	// Wire hub fetchers so WS broadcasts include full payloads instead of stub {job_id}.
+	// Wire hub fetchers.
 	if err := c.Invoke(func(hub *ws.Hub, jobSvc services.JobService, workerSvc services.WorkerService) {
 		hub.SetFetchers(jobSvc, jobSvc, workerSvc)
 	}); err != nil {
@@ -102,12 +92,10 @@ func BuildContainer() (*dig.Container, error) {
 	return c, nil
 }
 
-// provideWSBroadcaster bridges *ws.Hub → services.WSBroadcaster for dig.
 func provideWSBroadcaster(hub *ws.Hub) services.WSBroadcaster {
 	return hub
 }
 
-// provideRouter is the dig-injectable router constructor.
 func provideRouter(
 	authSvc services.AuthService,
 	workerRepo repository.WorkerRepository,
@@ -118,10 +106,9 @@ func provideRouter(
 	workerCtrl *controllers.WorkerController,
 	planCtrl *controllers.PlanSessionController,
 	previewCtrl *controllers.PreviewBundleController,
-	workerBuildCtrl *controllers.WorkerBuildController,
-	deploymentPlanCtrl *controllers.DeploymentPlanController,
+	previewSessionCtrl *controllers.PreviewSessionController,
 ) http.Handler {
-	return buildRouter(authSvc, workerRepo, hub, authCtrl, jobCtrl, msgCtrl, workerCtrl, planCtrl, previewCtrl, workerBuildCtrl, deploymentPlanCtrl)
+	return buildRouter(authSvc, workerRepo, hub, authCtrl, jobCtrl, msgCtrl, workerCtrl, planCtrl, previewCtrl, previewSessionCtrl)
 }
 
 func provideStackRegistry() (*stackregistry.Registry, error) {

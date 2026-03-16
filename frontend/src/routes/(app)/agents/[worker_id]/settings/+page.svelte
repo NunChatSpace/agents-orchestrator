@@ -28,10 +28,10 @@
 	let positionError = '';
 	let positionMessage = '';
 	let positionWorkerId = '';
-	let buildCommandDraft = '';
-	let savingBuildCommand = false;
-	let buildCommandMessage = '';
-	let buildCommandError = '';
+	let previewCommandDraft = '';
+	let savingPreviewCommand = false;
+	let previewCommandMessage = '';
+	let previewCommandError = '';
 	let workerDrafts: Record<InstructionField, string> = {
 		job: '',
 		plan: '',
@@ -59,9 +59,9 @@
 		mapY = String($selectedWorker.map_y ?? 0);
 		positionError = '';
 		positionMessage = '';
-		buildCommandDraft = $selectedWorker.build_command ?? '';
-		buildCommandMessage = '';
-		buildCommandError = '';
+		previewCommandDraft = $selectedWorker.preview_command ?? '';
+		previewCommandMessage = '';
+		previewCommandError = '';
 		workerDrafts = workerToDrafts($selectedWorker);
 		workerMessages = emptyFieldMessages();
 		workerErrors = emptyFieldMessages();
@@ -77,21 +77,22 @@
 		return `${Math.floor(hrs / 24)}d ago`;
 	}
 
-	async function saveBuildCommand() {
+	async function savePreviewCommand() {
 		if (!$selectedWorker) return;
-		savingBuildCommand = true;
-		buildCommandMessage = '';
-		buildCommandError = '';
+		savingPreviewCommand = true;
+		previewCommandMessage = '';
+		previewCommandError = '';
 		try {
-			const updated = await updateWorker($selectedWorker.worker_id, { build_command: buildCommandDraft });
+			const cmd = previewCommandDraft.trim() || null;
+			const updated = await updateWorker($selectedWorker.worker_id, { preview_command: cmd });
 			selectedWorker.set(updated);
 			upsertWorker(updated);
-			buildCommandDraft = updated.build_command ?? '';
-			buildCommandMessage = 'Build command saved';
+			previewCommandDraft = updated.preview_command ?? '';
+			previewCommandMessage = 'Preview command saved';
 		} catch (e: unknown) {
-			buildCommandError = e instanceof Error ? e.message : 'Failed to save build command';
+			previewCommandError = e instanceof Error ? e.message : 'Failed to save preview command';
 		} finally {
-			savingBuildCommand = false;
+			savingPreviewCommand = false;
 		}
 	}
 
@@ -233,31 +234,31 @@
 			</div>
 		</div>
 
-		<!-- Build Command -->
+		<!-- Preview Command -->
 		<div class="section">
 			<div class="section-header">
 				<div class="section-title">
 					<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+						<polygon points="5 3 19 12 5 21 5 3"/>
 					</svg>
-					Build Command
+					Preview Command
 				</div>
-				<button class="ping-btn" on:click={saveBuildCommand} disabled={savingBuildCommand}>
-					{savingBuildCommand ? 'Saving…' : 'Save'}
+				<button class="ping-btn" on:click={savePreviewCommand} disabled={savingPreviewCommand}>
+					{savingPreviewCommand ? 'Saving…' : 'Save'}
 				</button>
 			</div>
 			<textarea
 				class="nx-input instruction-textarea"
-				bind:value={buildCommandDraft}
-				rows="3"
-				placeholder="e.g. docker build -f backend/Dockerfile -t {'{image}'} backend"
+				bind:value={previewCommandDraft}
+				rows="2"
+				placeholder="e.g. PORT=8300 npm run dev"
 			></textarea>
-			{#if buildCommandError}
-				<p class="position-error">{buildCommandError}</p>
-			{:else if buildCommandMessage}
-				<p class="position-ok">{buildCommandMessage}</p>
+			{#if previewCommandError}
+				<p class="position-error">{previewCommandError}</p>
+			{:else if previewCommandMessage}
+				<p class="position-ok">{previewCommandMessage}</p>
 			{:else}
-				<p class="instruction-help">Used by the build agent to produce the preview image. Use <code>{'{image}'}</code> as a placeholder for the auto-generated image tag. Leave blank to let the agent discover the build method automatically.</p>
+				<p class="instruction-help">Shell command to start the preview app process. Use <code>PORT</code> env var for the allocated port. Leave blank to disable live preview for this agent.</p>
 			{/if}
 		</div>
 
